@@ -239,7 +239,7 @@ export function processPostsData(rawData: PostCSVRow[], timezone?: string): Proc
       content = content.substring(0, 1000) // Limit content length
 
       // Extract tweet text if available
-      const tweetText = row['tweet text']?.trim() || null
+      const tweetText = row['tweet text']?.trim() || undefined
 
       // Ensure typefully URL is valid
       let typefullyUrl = row['typefully draft link'].trim()
