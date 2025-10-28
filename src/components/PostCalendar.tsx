@@ -335,7 +335,7 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                           clientName={selectedPost.client?.name || 'Client'}
                           twitterHandle={selectedPost.client?.twitterHandle}
                           profilePicture={selectedPost.client?.profilePicture}
-                          tweetText={selectedPost.tweetText}
+                          tweetText={selectedPost.tweetText || ''}
                           timestamp={selectedPost.scheduledDate ? new Date(selectedPost.scheduledDate) : undefined}
                         />
                       ) : (
