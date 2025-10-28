@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { Role } from '@prisma/client'
 
 // GET all comments for a post
 export async function GET(
@@ -97,7 +98,7 @@ export async function POST(
         postId,
         userId: session.user.id,
         userName: session.user.name || session.user.email,
-        userRole: session.user.role,
+        userRole: session.user.role as Role,
         commentText,
         selectedText,
         startOffset,
