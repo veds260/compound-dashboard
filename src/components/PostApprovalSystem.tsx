@@ -1286,7 +1286,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                             clientName={mockupPost.client?.name || 'Client'}
                             twitterHandle={mockupPost.client?.twitterHandle}
                             profilePicture={mockupPost.client?.profilePicture}
-                            tweetText={mockupPost.tweetText}
+                            tweetText={mockupPost.tweetText || ''}
                             timestamp={mockupPost.scheduledDate ? new Date(mockupPost.scheduledDate) : undefined}
                             onCommentAdded={() => fetchComments(mockupPost.id)}
                           />
