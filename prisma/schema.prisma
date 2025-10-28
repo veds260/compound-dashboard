@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  AGENCY
+  CLIENT
+  ADMIN
+}
+
+enum PostStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUGGEST_CHANGES
+  PUBLISHED
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  password        String
+  role            Role     @default(AGENCY)
+  profilePicture  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  clientProfile   Client?  @relation("ClientUser")
+  clients         Client[] @relation("AgencyClients")
+  uploadsUploaded Upload[] @relation("UploadedBy")
+
+  @@map("User")
+}
+
+model Client {
+  id                String              @id @default(cuid())
+  name              String
+  email             String              @unique
+  twitterHandle     String?
+  profilePicture    String?
+  timezone          String?
+  active            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  agencyId          String?
+  userId            String?             @unique
+  analytics         Analytics[]
+  tweetAnalytics    TweetAnalytics[]
+  followerAnalytics FollowerAnalytics[]
+  contentDumps      ContentDump[]
+  user              User?               @relation("ClientUser", fields: [userId], references: [id])
+  agency            User?               @relation("AgencyClients", fields: [agencyId], references: [id], onDelete: Cascade)
+  posts             Post[]
+  uploads           Upload[]
+
+  @@map("Client")
+}
+
+model Upload {
+  id           String      @id @default(cuid())
+  filename     String
+  originalName String
+  uploadDate   DateTime    @default(now())
+  processed    Boolean     @default(false)
+  clientId     String
+  uploadedById String
+  postsCount   Int         @default(0)
+  analytics    Analytics[]
+  posts        Post[]
+  uploadedBy   User        @relation("UploadedBy", fields: [uploadedById], references: [id])
+  client       Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("Upload")
+}
+
+model Analytics {
+  id               String   @id @default(cuid())
+  date             DateTime
+  impressions      Int      @default(0)
+  engagements      Int      @default(0)
+  retweets         Int      @default(0)
+  replies          Int      @default(0)
+  likes            Int      @default(0)
+  profileClicks    Int      @default(0)
+  urlClicks        Int      @default(0)
+  hashtagClicks    Int      @default(0)
+  detailExpands    Int      @default(0)
+  permalinkClicks  Int      @default(0)
+  appOpens         Int      @default(0)
+  appInstalls      Int      @default(0)
+  follows          Int      @default(0)
+  emailTweet       Int      @default(0)
+  dialPhone        Int      @default(0)
+  mediaViews       Int      @default(0)
+  mediaEngagements Int      @default(0)
+  engagementRate   Float    @default(0)
+  clickThroughRate Float    @default(0)
+  createdAt        DateTime @default(now())
+  clientId         String
+  uploadId         String?
+  upload           Upload?  @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, date])
+  @@map("Analytics")
+}
+
+model Post {
+  id            String     @id @default(cuid())
+  content       String
+  tweetText     String?
+  scheduledDate DateTime?
+  typefullyUrl  String
+  status        PostStatus @default(PENDING)
+  feedback      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  clientId      String
+  uploadId      String?
+  tweetId       String?
+  tweetUrl      String?
+  publishedDate DateTime?
+  client        Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  upload        Upload?    @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+  comments      Comment[]
+
+  @@unique([clientId, tweetId])
+  @@map("Post")
+}
+
+model Comment {
+  id            String    @id @default(cuid())
+  postId        String
+  userId        String
+  userName      String
+  userRole      Role
+  commentText   String
+  selectedText  String
+  startOffset   Int
+  endOffset     Int
+  resolved      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@map("Comment")
+}
+
+model TweetAnalytics {
+  id                 String   @id @default(cuid())
+  tweetId            String
+  tweetUrl           String
+  text               String
+  createdAt          DateTime
+  retweetCount       Int      @default(0)
+  replyCount         Int      @default(0)
+  likeCount          Int      @default(0)
+  quoteCount         Int      @default(0)
+  impressionCount    Int      @default(0)
+  userProfileClicks  Int      @default(0)
+  bookmarkCount      Int      @default(0)
+  urlLinkClicks      Int      @default(0)
+  totalEngagements   Int      @default(0)
+  engagementRate     Float    @default(0)
+  isThreadHead       Boolean  @default(false)
+  isThreadPart       Boolean  @default(false)
+  isNoteTweet        Boolean  @default(false)
+  conversationLength Int      @default(0)
+  uploadedAt         DateTime @default(now())
+  clientId           String
+  uploadId           String?
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, tweetId])
+  @@index([clientId, createdAt])
+  @@map("TweetAnalytics")
+}
+
+model FollowerAnalytics {
+  id             String   @id @default(cuid())
+  startDate      DateTime
+  endDate        DateTime
+  followerCount  Int
+  followersGained Int     @default(0)
+  uploadedAt     DateTime @default(now())
+  clientId       String
+  uploadId       String?
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, startDate, endDate])
+  @@index([clientId, endDate])
+  @@map("FollowerAnalytics")
+}
+
+model ContentDump {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("ContentDump")
+}
