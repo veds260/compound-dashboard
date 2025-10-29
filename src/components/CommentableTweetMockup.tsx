@@ -422,7 +422,7 @@ export default function CommentableTweetMockup({
             </button>
             <button
               onClick={handleAddComment}
-              disabled={!commentText.trim() || (shareToken && !guestName.trim())}
+              disabled={!commentText.trim() || (shareToken ? !guestName.trim() : false)}
               className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Add Comment
