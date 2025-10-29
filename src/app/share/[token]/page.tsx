@@ -222,32 +222,47 @@ export default function SharedPostPage() {
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6 sticky top-6">
               <h3 className="text-lg font-bold text-white mb-4">Review Actions</h3>
               <div className="flex flex-col gap-3">
-            <button
-              onClick={() => handleStatusUpdate('APPROVED')}
-              disabled={updating || post.status === 'APPROVED'}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg disabled:transform-none"
-            >
-              <CheckCircleIcon className="w-5 h-5" />
-              Approve
-            </button>
+            {post.status === 'PENDING' && (
+              <>
+                <button
+                  onClick={() => handleStatusUpdate('APPROVED')}
+                  disabled={updating}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg disabled:transform-none"
+                >
+                  <CheckCircleIcon className="w-5 h-5" />
+                  Approve
+                </button>
 
-            <button
-              onClick={handleSuggestChangesClick}
-              disabled={updating || post.status === 'SUGGEST_CHANGES'}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg disabled:transform-none"
-            >
-              <PencilSquareIcon className="w-5 h-5" />
-              Suggest Changes
-            </button>
+                <button
+                  onClick={handleSuggestChangesClick}
+                  disabled={updating}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg disabled:transform-none"
+                >
+                  <PencilSquareIcon className="w-5 h-5" />
+                  Suggest Changes
+                </button>
 
-            <button
-              onClick={() => handleStatusUpdate('REJECTED')}
-              disabled={updating || post.status === 'REJECTED'}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg disabled:transform-none"
-            >
-              <XCircleIcon className="w-5 h-5" />
-              Reject
-            </button>
+                <button
+                  onClick={() => handleStatusUpdate('REJECTED')}
+                  disabled={updating}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg disabled:transform-none"
+                >
+                  <XCircleIcon className="w-5 h-5" />
+                  Reject
+                </button>
+              </>
+            )}
+
+            {post.status !== 'PENDING' && (
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 text-center">
+                <p className="text-gray-400 text-sm">
+                  This post has been {post.status === 'APPROVED' ? 'approved' : post.status === 'REJECTED' ? 'rejected' : 'marked for changes'}.
+                </p>
+                <p className="text-gray-500 text-xs mt-2">
+                  Waiting for agency to update the post.
+                </p>
+              </div>
+            )}
 
             <a
               href={post.typefullyUrl}
