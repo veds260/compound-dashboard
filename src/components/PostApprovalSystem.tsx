@@ -17,7 +17,8 @@ import {
   ArrowPathIcon,
   RocketLaunchIcon,
   ChatBubbleBottomCenterTextIcon,
-  ShareIcon
+  ShareIcon,
+  PhotoIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import DateTimePicker from './DateTimePicker'
@@ -104,6 +105,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [isEditingTweet, setIsEditingTweet] = useState(false)
   const [editedTweetText, setEditedTweetText] = useState('')
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const [postMedia, setPostMedia] = useState<any[]>([])
   const [selectedClient, setSelectedClient] = useState<string>(clientId || '')
   const [clients, setClients] = useState<{id: string, name: string, timezone?: string}[]>([])
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL')
@@ -182,6 +185,18 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     setIsEditingTweet(false)
     setEditedTweetText(post.tweetText || '')
     fetchComments(post.id)
+    // Parse media if it exists
+    if (post.media) {
+      try {
+        const parsedMedia = JSON.parse(post.media)
+        setPostMedia(parsedMedia)
+      } catch (error) {
+        console.error('Error parsing media:', error)
+        setPostMedia([])
+      }
+    } else {
+      setPostMedia([])
+    }
   }
 
   const handleSaveTweetEdit = async () => {
@@ -208,6 +223,70 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     } catch (error) {
       console.error('Error updating tweet:', error)
       toast.error('Failed to update tweet')
+    }
+  }
+
+  const handleMediaUpload = async (files: FileList) => {
+    if (!mockupPost) return
+    if (postMedia.length + files.length > 4) {
+      toast.error(`Cannot add ${files.length} file(s). Maximum 4 media items per post.`)
+      return
+    }
+
+    setUploadingMedia(true)
+    try {
+      const formData = new FormData()
+      Array.from(files).forEach(file => {
+        formData.append('files', file)
+      })
+
+      const response = await fetch(`/api/posts/${mockupPost.id}/media`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to upload media')
+      }
+
+      const result = await response.json()
+      setPostMedia(result.media)
+      toast.success(`Added ${files.length} media item(s)`)
+
+      // Update the post in the list
+      const updatedPosts = await fetchPosts()
+      setPosts(updatedPosts)
+    } catch (error: any) {
+      console.error('Error uploading media:', error)
+      toast.error(error.message || 'Failed to upload media')
+    } finally {
+      setUploadingMedia(false)
+    }
+  }
+
+  const handleDeleteMedia = async (index: number) => {
+    if (!mockupPost) return
+
+    try {
+      const response = await fetch(`/api/posts/${mockupPost.id}/media?index=${index}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete media')
+      }
+
+      const result = await response.json()
+      setPostMedia(result.media)
+      toast.success('Media removed')
+
+      // Update the post in the list
+      const updatedPosts = await fetchPosts()
+      setPosts(updatedPosts)
+    } catch (error) {
+      console.error('Error deleting media:', error)
+      toast.error('Failed to delete media')
     }
   }
 
@@ -1313,6 +1392,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                             tweetText={mockupPost.tweetText || ''}
                             timestamp={mockupPost.scheduledDate ? new Date(mockupPost.scheduledDate) : undefined}
                             onCommentAdded={() => fetchComments(mockupPost.id)}
+                            media={postMedia}
                           />
                         )
                       ) : (
@@ -1392,6 +1472,58 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                             <dd className="text-sm text-gray-300 whitespace-pre-wrap bg-theme-bg p-3 rounded-lg">
                               {mockupPost.feedback}
                             </dd>
+                          </div>
+                        )}
+
+                        {/* Media Upload Section */}
+                        {(userRole === 'AGENCY' || isAdmin) && (
+                          <div className="space-y-2 pb-4 border-b border-theme-border">
+                            <h4 className="text-xs font-medium text-gray-500 mb-2">Media ({postMedia.length}/4)</h4>
+
+                            {/* Media Grid */}
+                            {postMedia.length > 0 && (
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                {postMedia.map((item: any, index: number) => (
+                                  <div key={index} className="relative group">
+                                    <img
+                                      src={item.data}
+                                      alt={item.name || `Media ${index + 1}`}
+                                      className="w-full h-20 object-cover rounded-lg border border-theme-border"
+                                    />
+                                    <button
+                                      onClick={() => handleDeleteMedia(index)}
+                                      className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Upload Button */}
+                            {postMedia.length < 4 && (
+                              <label className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium w-full justify-center cursor-pointer">
+                                <PhotoIcon className="w-4 h-4 mr-2" />
+                                <span>{uploadingMedia ? 'Uploading...' : 'Add Media'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  disabled={uploadingMedia}
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    if (e.target.files) {
+                                      handleMediaUpload(e.target.files)
+                                      e.target.value = ''
+                                    }
+                                  }}
+                                />
+                              </label>
+                            )}
+                            <p className="text-xs text-gray-500">Max 3MB per image, 4 images total</p>
                           </div>
                         )}
 

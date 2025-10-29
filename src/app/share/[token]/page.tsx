@@ -205,6 +205,7 @@ export default function SharedPostPage() {
                   timestamp={post.scheduledDate ? new Date(post.scheduledDate) : undefined}
                   onCommentAdded={handleCommentsUpdate}
                   shareToken={token}
+                  media={post.media ? JSON.parse(post.media) : []}
                 />
               </div>
             ) : (

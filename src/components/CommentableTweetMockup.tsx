@@ -20,6 +20,12 @@ interface Comment {
   updatedAt: string
 }
 
+interface MediaItem {
+  type: string
+  data: string
+  name?: string
+}
+
 interface CommentableTweetMockupProps {
   postId: string
   clientName: string
@@ -29,6 +35,7 @@ interface CommentableTweetMockupProps {
   timestamp?: Date
   onCommentAdded?: () => void
   shareToken?: string
+  media?: MediaItem[]
 }
 
 export default function CommentableTweetMockup({
@@ -39,13 +46,19 @@ export default function CommentableTweetMockup({
   tweetText,
   timestamp,
   onCommentAdded,
-  shareToken
+  shareToken,
+  media
 }: CommentableTweetMockupProps) {
   const [comments, setComments] = useState<Comment[]>([])
   const [showCommentButton, setShowCommentButton] = useState(false)
   const [showCommentPopup, setShowCommentPopup] = useState(false)
   const [commentText, setCommentText] = useState('')
   const [guestName, setGuestName] = useState('')
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set())
+
+  const handleImageError = (index: number) => {
+    setImageErrors(prev => new Set(prev).add(index))
+  }
   const [selection, setSelection] = useState<{
     text: string
     startOffset: number
@@ -337,6 +350,44 @@ export default function CommentableTweetMockup({
           <div className="text-white text-[15px] leading-[1.4] whitespace-pre-wrap break-words mb-4">
             {renderTweetWithHighlights()}
           </div>
+
+          {/* Media Gallery */}
+          {media && media.length > 0 && (
+            <div className={`mb-4 rounded-2xl overflow-hidden border border-gray-800 ${
+              media.length === 1 ? '' :
+              media.length === 2 ? 'grid grid-cols-2 gap-0.5' :
+              media.length === 3 ? 'grid grid-cols-2 gap-0.5' :
+              'grid grid-cols-2 gap-0.5'
+            }`}>
+              {media.map((item, index) => (
+                <div
+                  key={index}
+                  className={`relative ${
+                    media.length === 3 && index === 0 ? 'col-span-2' : ''
+                  }`}
+                  style={{
+                    paddingBottom: media.length === 1 ? '56.25%' : '100%'
+                  }}
+                >
+                  {!imageErrors.has(index) ? (
+                    <img
+                      src={item.data}
+                      alt={item.name || `Media ${index + 1}`}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={() => handleImageError(index)}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center text-center p-4">
+                      <svg className="w-12 h-12 text-red-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <p className="text-red-300 text-sm font-semibold">Image unavailable</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Timestamp */}
           <div className="text-gray-500 text-[15px] mb-4 pb-4 border-b border-gray-800">
