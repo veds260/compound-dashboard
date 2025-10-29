@@ -346,7 +346,7 @@ export default function SharedPostPage() {
               </p>
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => router.push(`/api/auth/signin?callbackUrl=/share/${token}`)}
+                  onClick={() => router.push(`/api/auth/signin?callbackUrl=${encodeURIComponent(`/share/${token}`)}`)}
                   className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg"
                 >
                   Sign In

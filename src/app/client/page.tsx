@@ -333,7 +333,7 @@ export default function ClientDashboard() {
                 }
               }}
             >
-              <dt className="space-y-4">
+              <div className="space-y-4">
                 <div className={`${card.color} rounded-xl p-4 w-fit shadow-lg`}>
                   <card.icon className={`w-7 h-7 ${card.iconColor}`} strokeWidth={card.name === 'Approved Posts' ? 3 : 2} />
                 </div>
@@ -341,10 +341,10 @@ export default function ClientDashboard() {
                   <p className="text-xl font-semibold text-white">{card.name}</p>
                   <p className="text-sm text-gray-400 mt-1">{card.description}</p>
                 </div>
-              </dt>
-              <dd className="mt-6">
+              </div>
+              <div className="mt-6">
                 <p className="text-5xl font-bold text-white">{card.value}</p>
-              </dd>
+              </div>
             </PremiumCard>
           ))}
         </div>
