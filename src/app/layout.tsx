@@ -16,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" style={{ colorScheme: 'dark' }}>
-      <body className={`${inter.className} bg-theme-bg text-white`} style={{ backgroundColor: '#0B0E11', color: '#ffffff' }}>
+    <html lang="en" className="dark" style={{ colorScheme: 'dark' }}>
+      <body className={`${inter.className} bg-theme-bg text-white dark`} style={{ backgroundColor: '#0B0E11', color: '#ffffff' }}>
         <Providers>
           {children}
           <Toaster
