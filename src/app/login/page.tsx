@@ -97,7 +97,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-10">
         <div className="text-center">
           <div className="flex justify-center mb-6">
-            <Logo width={200} height={50} forceTheme="dark" />
+            <Logo width={200} height={50} />
           </div>
           <h2 className="text-2xl font-bold text-white">
             Sign in

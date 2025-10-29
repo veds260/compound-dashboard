@@ -1,19 +1,14 @@
 'use client'
 
-import { useTheme } from '@/contexts/ThemeContext'
-
 interface LogoProps {
   width?: number
   height?: number
   className?: string
-  forceTheme?: 'light' | 'dark'
 }
 
-export default function Logo({ width = 120, height = 28, className = '', forceTheme }: LogoProps) {
-  const { theme } = useTheme()
-
-  const effectiveTheme = forceTheme || theme
-  const textColor = effectiveTheme === 'dark' ? 'white' : 'black'
+export default function Logo({ width = 120, height = 28, className = '' }: LogoProps) {
+  // Always use white text since we only have dark mode
+  const textColor = 'white'
 
   return (
     <svg
