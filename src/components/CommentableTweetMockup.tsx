@@ -366,7 +366,7 @@ export default function CommentableTweetMockup({
                     media.length === 3 && index === 0 ? 'row-span-2' : ''
                   }`}
                   style={{
-                    paddingBottom: media.length === 1 ? '56.25%' : '100%'
+                    paddingBottom: media.length === 1 ? '56.25%' : '75%'
                   }}
                 >
                   {!imageErrors.has(index) ? (
