@@ -256,8 +256,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       toast.success(`Added ${files.length} media item(s)`)
 
       // Update the post in the list
-      const updatedPosts = await fetchPosts()
-      setPosts(updatedPosts)
+      await fetchPosts()
     } catch (error: any) {
       console.error('Error uploading media:', error)
       toast.error(error.message || 'Failed to upload media')
@@ -283,8 +282,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       toast.success('Media removed')
 
       // Update the post in the list
-      const updatedPosts = await fetchPosts()
-      setPosts(updatedPosts)
+      await fetchPosts()
     } catch (error) {
       console.error('Error deleting media:', error)
       toast.error('Failed to delete media')
