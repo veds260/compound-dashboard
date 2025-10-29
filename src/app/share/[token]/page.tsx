@@ -15,6 +15,7 @@ interface Post {
   typefullyUrl: string
   status: string
   feedback: string | null
+  media: string | null
   client: {
     id: string
     name: string
