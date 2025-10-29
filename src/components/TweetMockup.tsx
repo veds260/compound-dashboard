@@ -152,14 +152,14 @@ export default function TweetMockup({
         <div className={`mb-4 rounded-2xl overflow-hidden border border-gray-800 ${
           media.length === 1 ? '' :
           media.length === 2 ? 'grid grid-cols-2 gap-0.5' :
-          media.length === 3 ? 'grid grid-cols-2 gap-0.5' :
+          media.length === 3 ? 'grid grid-cols-2 grid-rows-2 gap-0.5' :
           'grid grid-cols-2 gap-0.5'
         }`}>
           {media.map((item, index) => (
             <div
               key={index}
               className={`relative ${
-                media.length === 3 && index === 0 ? 'col-span-2' : ''
+                media.length === 3 && index === 0 ? 'row-span-2' : ''
               }`}
               style={{
                 paddingBottom: media.length === 1 ? '56.25%' : '100%'
