@@ -163,8 +163,8 @@ export default function SharedPostPage() {
             <CommentableTweetMockup
               postId={post.id}
               clientName={post.client.name}
-              twitterHandle={post.client.twitterHandle}
-              profilePicture={post.client.profilePicture}
+              twitterHandle={post.client.twitterHandle || undefined}
+              profilePicture={post.client.profilePicture || undefined}
               tweetText={post.tweetText || ''}
               timestamp={post.scheduledDate ? new Date(post.scheduledDate) : undefined}
               onCommentAdded={handleCommentsUpdate}
