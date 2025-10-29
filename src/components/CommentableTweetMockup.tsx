@@ -45,6 +45,7 @@ export default function CommentableTweetMockup({
   const [showCommentButton, setShowCommentButton] = useState(false)
   const [showCommentPopup, setShowCommentPopup] = useState(false)
   const [commentText, setCommentText] = useState('')
+  const [guestName, setGuestName] = useState('')
   const [selection, setSelection] = useState<{
     text: string
     startOffset: number
@@ -123,22 +124,35 @@ export default function CommentableTweetMockup({
       return
     }
 
+    // If it's a share token and no guest name is provided, show error
+    if (shareToken && !guestName.trim()) {
+      toast.error('Please enter your name')
+      return
+    }
+
     try {
       const url = shareToken
         ? `/api/share/${shareToken}/comments`
         : `/api/posts/${postId}/comments`
+
+      const requestBody: any = {
+        commentText: commentText.trim(),
+        selectedText: selection.text,
+        startOffset: selection.startOffset,
+        endOffset: selection.endOffset
+      }
+
+      // Add guest name if it's a share token
+      if (shareToken && guestName.trim()) {
+        requestBody.guestName = guestName.trim()
+      }
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          commentText: commentText.trim(),
-          selectedText: selection.text,
-          startOffset: selection.startOffset,
-          endOffset: selection.endOffset
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
@@ -148,6 +162,7 @@ export default function CommentableTweetMockup({
       const newComment = await response.json()
       setComments([...comments, newComment])
       setCommentText('')
+      setGuestName('')
       setShowCommentPopup(false)
       setSelection(null)
       toast.success('Comment added!')
@@ -166,6 +181,7 @@ export default function CommentableTweetMockup({
     setShowCommentPopup(false)
     setSelection(null)
     setCommentText('')
+    setGuestName('')
     window.getSelection()?.removeAllRanges()
   }
 
@@ -376,6 +392,17 @@ export default function CommentableTweetMockup({
             "{selection.text}"
           </div>
 
+          {/* Guest Name Input - Only show for share links */}
+          {shareToken && (
+            <input
+              type="text"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              placeholder="Your name"
+              className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 p-2 text-sm mb-3 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          )}
+
           <textarea
             ref={textareaRef}
             value={commentText}
@@ -395,7 +422,7 @@ export default function CommentableTweetMockup({
             </button>
             <button
               onClick={handleAddComment}
-              disabled={!commentText.trim()}
+              disabled={!commentText.trim() || (shareToken && !guestName.trim())}
               className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Add Comment

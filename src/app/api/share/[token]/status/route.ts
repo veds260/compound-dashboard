@@ -10,7 +10,7 @@ export async function POST(
   try {
     const { token } = params
     const body = await request.json()
-    const { status } = body
+    const { status, feedback } = body
 
     // Validate status
     if (!status || !['APPROVED', 'REJECTED', 'SUGGEST_CHANGES'].includes(status)) {
@@ -36,10 +36,18 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
+    // Prepare update data
+    const updateData: any = { status: status as PostStatus }
+
+    // Add feedback if status is SUGGEST_CHANGES and feedback is provided
+    if (status === 'SUGGEST_CHANGES' && feedback) {
+      updateData.feedback = feedback
+    }
+
     // Update post status
     const updatedPost = await prisma.post.update({
       where: { id: post.id },
-      data: { status: status as PostStatus },
+      data: updateData,
       include: {
         client: {
           select: {

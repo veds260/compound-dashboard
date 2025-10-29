@@ -38,10 +38,14 @@ export async function POST(
   try {
     const { token } = params
     const body = await request.json()
-    const { commentText, selectedText, startOffset, endOffset } = body
+    const { commentText, selectedText, startOffset, endOffset, guestName } = body
 
     if (!commentText || !selectedText) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    if (!guestName || !guestName.trim()) {
+      return NextResponse.json({ error: 'Guest name is required' }, { status: 400 })
     }
 
     // Find post by share token
@@ -61,12 +65,12 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
-    // Create comment as anonymous client
+    // Create comment as guest user
     const comment = await prisma.comment.create({
       data: {
         postId: post.id,
         userId: post.client.id, // Use client ID as user ID
-        userName: post.client.name,
+        userName: guestName.trim(), // Use provided guest name
         userRole: 'CLIENT', // Mark as client comment
         commentText,
         selectedText,
