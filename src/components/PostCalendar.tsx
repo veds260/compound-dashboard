@@ -338,6 +338,7 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                           profilePicture={selectedPost.client?.profilePicture}
                           tweetText={selectedPost.tweetText || ''}
                           timestamp={selectedPost.scheduledDate ? new Date(selectedPost.scheduledDate) : undefined}
+                          media={selectedPost.media ? JSON.parse(selectedPost.media) : []}
                         />
                       ) : (
                         <div className="space-y-4">
