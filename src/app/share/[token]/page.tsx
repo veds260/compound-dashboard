@@ -190,33 +190,36 @@ export default function SharedPostPage() {
           </div>
         </div>
 
-        {/* Tweet Mockup or Content */}
-        <div className="mb-6">
-          {hasTweetText ? (
-            <div className="flex justify-center">
-              <CommentableTweetMockup
-                postId={post.id}
-                clientName={post.client.name}
-                twitterHandle={post.client.twitterHandle || undefined}
-                profilePicture={post.client.profilePicture || undefined}
-                tweetText={post.tweetText || ''}
-                timestamp={post.scheduledDate ? new Date(post.scheduledDate) : undefined}
-                onCommentAdded={handleCommentsUpdate}
-                shareToken={token}
-              />
-            </div>
-          ) : (
-            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6">
-              <p className="text-sm font-semibold text-gray-400 mb-2">Content:</p>
-              <p className="text-gray-100 whitespace-pre-wrap leading-relaxed">{post.content}</p>
-            </div>
-          )}
-        </div>
+        {/* Tweet Mockup and Action Buttons Side by Side */}
+        <div className="flex flex-col lg:flex-row gap-6 mb-6">
+          {/* Tweet Mockup or Content */}
+          <div className="flex-1">
+            {hasTweetText ? (
+              <div className="flex justify-center lg:justify-start">
+                <CommentableTweetMockup
+                  postId={post.id}
+                  clientName={post.client.name}
+                  twitterHandle={post.client.twitterHandle || undefined}
+                  profilePicture={post.client.profilePicture || undefined}
+                  tweetText={post.tweetText || ''}
+                  timestamp={post.scheduledDate ? new Date(post.scheduledDate) : undefined}
+                  onCommentAdded={handleCommentsUpdate}
+                  shareToken={token}
+                />
+              </div>
+            ) : (
+              <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6">
+                <p className="text-sm font-semibold text-gray-400 mb-2">Content:</p>
+                <p className="text-gray-100 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+              </div>
+            )}
+          </div>
 
-        {/* Action Buttons */}
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6 mb-6">
-          <h3 className="text-lg font-bold text-white mb-4">Review Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Action Buttons */}
+          <div className="lg:w-80 flex-shrink-0">
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6 sticky top-6">
+              <h3 className="text-lg font-bold text-white mb-4">Review Actions</h3>
+              <div className="flex flex-col gap-3">
             <button
               onClick={() => handleStatusUpdate('APPROVED')}
               disabled={updating || post.status === 'APPROVED'}
@@ -255,6 +258,8 @@ export default function SharedPostPage() {
               </svg>
               Open in Typefully
             </a>
+              </div>
+            </div>
           </div>
         </div>
 
