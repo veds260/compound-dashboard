@@ -28,6 +28,7 @@ interface CommentableTweetMockupProps {
   tweetText: string
   timestamp?: Date
   onCommentAdded?: () => void
+  shareToken?: string
 }
 
 export default function CommentableTweetMockup({
@@ -37,7 +38,8 @@ export default function CommentableTweetMockup({
   profilePicture,
   tweetText,
   timestamp,
-  onCommentAdded
+  onCommentAdded,
+  shareToken
 }: CommentableTweetMockupProps) {
   const [comments, setComments] = useState<Comment[]>([])
   const [showCommentButton, setShowCommentButton] = useState(false)
@@ -60,7 +62,10 @@ export default function CommentableTweetMockup({
 
   const fetchComments = async () => {
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`)
+      const url = shareToken
+        ? `/api/share/${shareToken}/comments`
+        : `/api/posts/${postId}/comments`
+      const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
         setComments(data)
@@ -119,7 +124,11 @@ export default function CommentableTweetMockup({
     }
 
     try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
+      const url = shareToken
+        ? `/api/share/${shareToken}/comments`
+        : `/api/posts/${postId}/comments`
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

@@ -16,7 +16,8 @@ import {
   ArrowsPointingOutIcon,
   ArrowPathIcon,
   RocketLaunchIcon,
-  ChatBubbleBottomCenterTextIcon
+  ChatBubbleBottomCenterTextIcon,
+  ShareIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import DateTimePicker from './DateTimePicker'
@@ -96,6 +97,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [feedback, setFeedback] = useState('')
   const [tweetUrl, setTweetUrl] = useState('')
   const [writerNote, setWriterNote] = useState('')
+  const [shareUrls, setShareUrls] = useState<{ [postId: string]: string }>({})
   const [mockupPost, setMockupPost] = useState<Post | null>(null)
   const [isMockupModalOpen, setIsMockupModalOpen] = useState(false)
   const [postComments, setPostComments] = useState<any[]>([])
@@ -240,6 +242,28 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     } catch (error) {
       console.error('Error updating post:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to update post')
+    }
+  }
+
+  const handleGenerateShareLink = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/share`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate share link')
+      }
+
+      const { shareUrl } = await response.json()
+      setShareUrls({ ...shareUrls, [postId]: shareUrl })
+
+      // Copy to clipboard
+      navigator.clipboard.writeText(shareUrl)
+      toast.success('Share link copied to clipboard!')
+    } catch (error) {
+      console.error('Error generating share link:', error)
+      toast.error('Failed to generate share link')
     }
   }
 
@@ -1371,7 +1395,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           </div>
                         )}
 
-                        <div>
+                        <div className="space-y-2">
                           <a
                             href={mockupPost.typefullyUrl}
                             target="_blank"
@@ -1381,6 +1405,16 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                             <span>Open in Typefully</span>
                             <ArrowTopRightOnSquareIcon className="w-4 h-4 ml-2" />
                           </a>
+
+                          {(userRole === 'AGENCY' || isAdmin) && (
+                            <button
+                              onClick={() => handleGenerateShareLink(mockupPost.id)}
+                              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium w-full justify-center"
+                            >
+                              <ShareIcon className="w-4 h-4 mr-2" />
+                              <span>{shareUrls[mockupPost.id] ? 'Copy Share Link' : 'Generate Share Link'}</span>
+                            </button>
+                          )}
                         </div>
 
                         {/* Client/Admin approval buttons */}

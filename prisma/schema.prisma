@@ -125,6 +125,7 @@ model Post {
   tweetId       String?
   tweetUrl      String?
   publishedDate DateTime?
+  shareToken    String?    @unique
   client        Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   upload        Upload?    @relation(fields: [uploadId], references: [id], onDelete: SetNull)
   comments      Comment[]
