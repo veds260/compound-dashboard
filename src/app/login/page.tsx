@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { signIn, getSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import Logo from '@/components/Logo'
@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get('callbackUrl')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,15 +65,22 @@ export default function LoginPage() {
         return
       }
 
-      if (session.user.role === 'ADMIN') {
-        console.log('[Login Page] Redirecting ADMIN to /admin')
-        router.push('/admin')
-      } else if (session.user.role === 'AGENCY') {
-        console.log('[Login Page] Redirecting AGENCY to /dashboard')
-        router.push('/dashboard')
+      // Check if there's a callback URL to redirect to
+      if (callbackUrl) {
+        console.log('[Login Page] Redirecting to callback URL:', callbackUrl)
+        router.push(callbackUrl)
       } else {
-        console.log('[Login Page] Redirecting CLIENT to /client')
-        router.push('/client')
+        // Default role-based redirects
+        if (session.user.role === 'ADMIN') {
+          console.log('[Login Page] Redirecting ADMIN to /admin')
+          router.push('/admin')
+        } else if (session.user.role === 'AGENCY') {
+          console.log('[Login Page] Redirecting AGENCY to /dashboard')
+          router.push('/dashboard')
+        } else {
+          console.log('[Login Page] Redirecting CLIENT to /client')
+          router.push('/client')
+        }
       }
 
       toast.success('Logged in successfully')
