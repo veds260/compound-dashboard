@@ -14,6 +14,7 @@ interface Post {
   typefullyUrl: string
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUGGEST_CHANGES' | 'PUBLISHED'
   feedback?: string
+  media?: string
   createdAt: string
   client: {
     id: string
