@@ -69,8 +69,10 @@ export async function POST(
       const base64 = buffer.toString('base64')
       const dataUrl = `data:${file.type};base64,${base64}`
 
-      // Check final data URL size (should be under 1MB for database efficiency)
-      if (dataUrl.length > 1000000) {
+      // Check final data URL size (base64 encoding increases size by ~33%)
+      // Max 3MB original = ~4MB base64, so we allow up to 5MB to be safe
+      const maxBase64Size = 5 * 1024 * 1024 // 5MB
+      if (dataUrl.length > maxBase64Size) {
         return NextResponse.json(
           { error: `Compressed image is still too large: ${file.name}. Please use a smaller image.` },
           { status: 400 }
