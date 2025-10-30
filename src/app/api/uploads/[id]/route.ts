@@ -55,73 +55,63 @@ export async function DELETE(
 
     console.log(`[Undo Upload] Current upload: ${id}, Previous upload: ${previousUpload?.id || 'none'}`)
 
-    // Get posts associated with this upload
-    const postsToHandle = await prisma.post.findMany({
-      where: {
-        uploadId: id
-      },
-      select: {
-        id: true,
-        typefullyUrl: true,
-        uploadId: true
-      }
-    })
-
-    console.log(`[Undo Upload] Found ${postsToHandle.length} posts with current uploadId`)
-
     let restoredCount = 0
     let deletedCount = 0
 
     if (previousUpload) {
-      // Strategy: Restore posts to previous upload state
-      // Check which posts existed in previous upload
-      const previousPosts = await prisma.post.findMany({
+      // Strategy: Use creation dates to determine which posts are new vs existing
+      // Posts created AFTER previous upload are NEW (delete them)
+      // Posts created BEFORE or AT previous upload are EXISTING (restore them)
+
+      // Get ALL posts for this client
+      const allClientPosts = await prisma.post.findMany({
         where: {
-          clientId: upload.clientId,
-          OR: [
-            { uploadId: previousUpload.id },
-            { uploadId: null } // Include orphaned posts that might belong to previous upload
-          ]
+          clientId: upload.clientId
         },
         select: {
           id: true,
-          typefullyUrl: true
+          typefullyUrl: true,
+          createdAt: true,
+          uploadId: true
         }
       })
 
-      const previousUrlsMap = new Map(previousPosts.map(p => [p.typefullyUrl, p.id]))
+      console.log(`[Undo Upload] Found ${allClientPosts.length} total posts for client`)
+      console.log(`[Undo Upload] Previous upload date: ${previousUpload.uploadDate}`)
+      console.log(`[Undo Upload] Current upload date: ${upload.uploadDate}`)
 
-      console.log(`[Undo Upload] Previous upload had ${previousPosts.length} posts`)
-
-      // For each post in current upload:
-      // 1. If it existed in previous upload (same URL), it was updated → restore its uploadId
-      // 2. If it's new (not in previous), delete it
-      for (const post of postsToHandle) {
-        if (previousUrlsMap.has(post.typefullyUrl)) {
-          // This post existed before, restore its uploadId to previous
+      for (const post of allClientPosts) {
+        // Check if post was created AFTER the previous upload (meaning it's new from current upload)
+        if (post.createdAt > previousUpload.uploadDate) {
+          // This is a NEW post from current upload, delete it
+          console.log(`[Undo Upload] Deleting new post created at ${post.createdAt}: ${post.typefullyUrl.substring(0, 50)}`)
+          await prisma.post.delete({
+            where: { id: post.id }
+          })
+          deletedCount++
+        } else if (post.uploadId === id) {
+          // This is an EXISTING post that was updated in current upload
+          // Restore its uploadId back to previous upload
+          console.log(`[Undo Upload] Restoring existing post created at ${post.createdAt}: ${post.typefullyUrl.substring(0, 50)}`)
           await prisma.post.update({
             where: { id: post.id },
             data: { uploadId: previousUpload.id }
           })
           restoredCount++
-        } else {
-          // This is a new post from current upload, delete it
-          await prisma.post.delete({
-            where: { id: post.id }
-          })
-          deletedCount++
         }
+        // If post.uploadId !== id and createdAt <= previousUpload.uploadDate, leave it alone
+        // (it's from an even older upload)
       }
 
       console.log(`[Undo Upload] Restored ${restoredCount} posts to previous upload, deleted ${deletedCount} new posts`)
     } else {
-      // No previous upload, delete all posts from this upload
-      deletedCount = postsToHandle.length
-      await prisma.post.deleteMany({
+      // No previous upload, delete all posts for this client
+      const result = await prisma.post.deleteMany({
         where: {
-          uploadId: id
+          clientId: upload.clientId
         }
       })
+      deletedCount = result.count
       console.log(`[Undo Upload] No previous upload found, deleted all ${deletedCount} posts`)
     }
 
