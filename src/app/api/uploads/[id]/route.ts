@@ -26,7 +26,8 @@ export async function DELETE(
       include: {
         client: {
           select: {
-            name: true
+            name: true,
+            id: true
           }
         }
       }
@@ -39,18 +40,89 @@ export async function DELETE(
       )
     }
 
-    // Try to delete posts associated with this upload
-    // This will only work if migration has been applied
-    let deletedPosts = { count: 0 }
-    try {
-      deletedPosts = await prisma.post.deleteMany({
+    // Find the previous upload for this client (by date, before current upload)
+    const previousUpload = await prisma.upload.findFirst({
+      where: {
+        clientId: upload.clientId,
+        uploadDate: {
+          lt: upload.uploadDate
+        }
+      },
+      orderBy: {
+        uploadDate: 'desc'
+      }
+    })
+
+    console.log(`[Undo Upload] Current upload: ${id}, Previous upload: ${previousUpload?.id || 'none'}`)
+
+    // Get posts associated with this upload
+    const postsToHandle = await prisma.post.findMany({
+      where: {
+        uploadId: id
+      },
+      select: {
+        id: true,
+        typefullyUrl: true,
+        uploadId: true
+      }
+    })
+
+    console.log(`[Undo Upload] Found ${postsToHandle.length} posts with current uploadId`)
+
+    let restoredCount = 0
+    let deletedCount = 0
+
+    if (previousUpload) {
+      // Strategy: Restore posts to previous upload state
+      // Check which posts existed in previous upload
+      const previousPosts = await prisma.post.findMany({
+        where: {
+          clientId: upload.clientId,
+          OR: [
+            { uploadId: previousUpload.id },
+            { uploadId: null } // Include orphaned posts that might belong to previous upload
+          ]
+        },
+        select: {
+          id: true,
+          typefullyUrl: true
+        }
+      })
+
+      const previousUrlsMap = new Map(previousPosts.map(p => [p.typefullyUrl, p.id]))
+
+      console.log(`[Undo Upload] Previous upload had ${previousPosts.length} posts`)
+
+      // For each post in current upload:
+      // 1. If it existed in previous upload (same URL), it was updated → restore its uploadId
+      // 2. If it's new (not in previous), delete it
+      for (const post of postsToHandle) {
+        if (previousUrlsMap.has(post.typefullyUrl)) {
+          // This post existed before, restore its uploadId to previous
+          await prisma.post.update({
+            where: { id: post.id },
+            data: { uploadId: previousUpload.id }
+          })
+          restoredCount++
+        } else {
+          // This is a new post from current upload, delete it
+          await prisma.post.delete({
+            where: { id: post.id }
+          })
+          deletedCount++
+        }
+      }
+
+      console.log(`[Undo Upload] Restored ${restoredCount} posts to previous upload, deleted ${deletedCount} new posts`)
+    } else {
+      // No previous upload, delete all posts from this upload
+      deletedCount = postsToHandle.length
+      await prisma.post.deleteMany({
         where: {
           uploadId: id
         }
       })
-    } catch (error: any) {
-      console.log('uploadId field not available yet, cannot delete associated posts')
-      // If the field doesn't exist, we can still delete the upload record
+      console.log(`[Undo Upload] No previous upload found, deleted all ${deletedCount} posts`)
     }
 
     // Delete the upload record
@@ -58,12 +130,15 @@ export async function DELETE(
       where: { id }
     })
 
+    const message = previousUpload
+      ? `Upload undone successfully. Restored ${restoredCount} posts to previous state and removed ${deletedCount} new posts.`
+      : `Upload undone successfully. Deleted ${deletedCount} posts (no previous upload to restore).`
+
     return NextResponse.json({
       success: true,
-      message: deletedPosts.count > 0
-        ? `Upload undone successfully. Deleted ${deletedPosts.count} posts.`
-        : 'Upload deleted. Note: Cannot delete associated posts until migration is applied.',
-      deletedPosts: deletedPosts.count,
+      message,
+      restoredCount,
+      deletedCount,
       clientName: upload.client.name
     })
   } catch (error: any) {

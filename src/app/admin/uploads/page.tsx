@@ -78,7 +78,7 @@ export default function UploadsManagement() {
   }
 
   const handleUndoUpload = async (upload: Upload) => {
-    const confirmMessage = `Are you sure you want to undo this upload?\n\nClient: ${upload.client.name}\nUploaded: ${format(new Date(upload.uploadDate), 'MMM d, yyyy h:mm a')}\nPosts: ${upload._count.posts}\n\nThis will delete ${upload._count.posts} posts created from this upload.`
+    const confirmMessage = `Are you sure you want to undo this upload?\n\nClient: ${upload.client.name}\nUploaded: ${format(new Date(upload.uploadDate), 'MMM d, yyyy h:mm a')}\nPosts: ${upload._count.posts}\n\nThis will revert to the previous upload state for this client. Posts that were updated will be restored, and new posts will be removed.`
 
     if (!confirm(confirmMessage)) {
       return
@@ -98,8 +98,8 @@ export default function UploadsManagement() {
       }
 
       toast.success(data.message)
-      // Remove upload from list
-      setUploads(uploads.filter(u => u.id !== upload.id))
+      // Refresh the entire list to show updated state (including restored previous upload)
+      await fetchUploads()
     } catch (error) {
       console.error('Error undoing upload:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to undo upload')
