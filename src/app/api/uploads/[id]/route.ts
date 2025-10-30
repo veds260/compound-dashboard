@@ -53,16 +53,30 @@ export async function DELETE(
       }
     })
 
-    console.log(`[Undo Upload] Current upload: ${id}, Previous upload: ${previousUpload?.id || 'none'}`)
+    console.log('========================================')
+    console.log('[Undo Upload] START UNDO OPERATION')
+    console.log('========================================')
+    console.log(`[Undo Upload] Upload to undo:`)
+    console.log(`  - ID: ${id}`)
+    console.log(`  - Client: ${upload.client.name}`)
+    console.log(`  - Upload Date: ${upload.uploadDate}`)
+    console.log(`  - Posts Count: ${upload.postsCount}`)
+
+    if (previousUpload) {
+      console.log(`[Undo Upload] Previous upload found:`)
+      console.log(`  - ID: ${previousUpload.id}`)
+      console.log(`  - Upload Date: ${previousUpload.uploadDate}`)
+      console.log(`  - Posts Count: ${previousUpload.postsCount}`)
+    } else {
+      console.log(`[Undo Upload] ⚠️  NO PREVIOUS UPLOAD FOUND`)
+    }
+    console.log('========================================')
 
     let restoredCount = 0
     let deletedCount = 0
+    let skippedCount = 0
 
     if (previousUpload) {
-      // Strategy: Use creation dates to determine which posts are new vs existing
-      // Posts created AFTER previous upload are NEW (delete them)
-      // Posts created BEFORE or AT previous upload are EXISTING (restore them)
-
       // Get ALL posts for this client
       const allClientPosts = await prisma.post.findMany({
         where: {
@@ -71,48 +85,116 @@ export async function DELETE(
         select: {
           id: true,
           typefullyUrl: true,
+          content: true,
           createdAt: true,
-          uploadId: true
+          uploadId: true,
+          status: true
+        },
+        orderBy: {
+          createdAt: 'asc'
         }
       })
 
-      console.log(`[Undo Upload] Found ${allClientPosts.length} total posts for client`)
-      console.log(`[Undo Upload] Previous upload date: ${previousUpload.uploadDate}`)
-      console.log(`[Undo Upload] Current upload date: ${upload.uploadDate}`)
+      console.log(`\n[Undo Upload] Found ${allClientPosts.length} total posts for client "${upload.client.name}"`)
+      console.log('----------------------------------------')
+
+      // Distribution by uploadId
+      const postsByUploadId: Record<string, number> = {}
+      allClientPosts.forEach(post => {
+        const uploadKey = post.uploadId || 'null'
+        postsByUploadId[uploadKey] = (postsByUploadId[uploadKey] || 0) + 1
+      })
+
+      console.log('[Undo Upload] Posts distribution by uploadId:')
+      Object.entries(postsByUploadId).forEach(([uploadId, count]) => {
+        console.log(`  - ${uploadId}: ${count} posts`)
+      })
+      console.log('----------------------------------------')
+
+      // Time analysis
+      const previousUploadTime = new Date(previousUpload.uploadDate).getTime()
+      const currentUploadTime = new Date(upload.uploadDate).getTime()
+      const timeDiffMinutes = (currentUploadTime - previousUploadTime) / 1000 / 60
+
+      console.log(`\n[Undo Upload] Time analysis:`)
+      console.log(`  - Previous upload: ${previousUpload.uploadDate}`)
+      console.log(`  - Current upload: ${upload.uploadDate}`)
+      console.log(`  - Difference: ${timeDiffMinutes.toFixed(2)} minutes`)
+      console.log('----------------------------------------')
+
+      console.log(`\n[Undo Upload] Processing each post:\n`)
 
       for (const post of allClientPosts) {
-        // Check if post was created AFTER the previous upload (meaning it's new from current upload)
-        if (post.createdAt > previousUpload.uploadDate) {
-          // This is a NEW post from current upload, delete it
-          console.log(`[Undo Upload] Deleting new post created at ${post.createdAt}: ${post.typefullyUrl.substring(0, 50)}`)
-          await prisma.post.delete({
-            where: { id: post.id }
-          })
-          deletedCount++
-        } else if (post.uploadId === id) {
-          // This is an EXISTING post that was updated in current upload
-          // Restore its uploadId back to previous upload
-          console.log(`[Undo Upload] Restoring existing post created at ${post.createdAt}: ${post.typefullyUrl.substring(0, 50)}`)
-          await prisma.post.update({
-            where: { id: post.id },
-            data: { uploadId: previousUpload.id }
-          })
-          restoredCount++
+        const postCreatedTime = new Date(post.createdAt).getTime()
+        const createdAfterPrevious = postCreatedTime > previousUploadTime
+        const belongsToCurrentUpload = post.uploadId === id
+
+        try {
+          if (createdAfterPrevious) {
+            // Post created AFTER previous upload = NEW from current upload
+            console.log(`🗑️  DELETE: Created ${post.createdAt} (after ${previousUpload.uploadDate})`)
+            console.log(`   URL: ${post.typefullyUrl.substring(0, 80)}`)
+            console.log(`   UploadId: ${post.uploadId}\n`)
+
+            await prisma.post.delete({
+              where: { id: post.id }
+            })
+            deletedCount++
+          } else if (belongsToCurrentUpload) {
+            // Post created BEFORE/AT previous upload but has current upload's ID = was UPDATED
+            console.log(`♻️  RESTORE: Created ${post.createdAt} (before/at ${previousUpload.uploadDate})`)
+            console.log(`   URL: ${post.typefullyUrl.substring(0, 80)}`)
+            console.log(`   UploadId: ${post.uploadId} → ${previousUpload.id}\n`)
+
+            await prisma.post.update({
+              where: { id: post.id },
+              data: { uploadId: previousUpload.id }
+            })
+            restoredCount++
+          } else {
+            // From older upload
+            console.log(`⏭️  SKIP: Created ${post.createdAt}, uploadId: ${post.uploadId}`)
+            console.log(`   URL: ${post.typefullyUrl.substring(0, 80)}\n`)
+            skippedCount++
+          }
+        } catch (error: any) {
+          console.error(`❌ ERROR processing post ${post.id}:`, error.message)
         }
-        // If post.uploadId !== id and createdAt <= previousUpload.uploadDate, leave it alone
-        // (it's from an even older upload)
       }
 
-      console.log(`[Undo Upload] Restored ${restoredCount} posts to previous upload, deleted ${deletedCount} new posts`)
+      console.log('========================================')
+      console.log('[Undo Upload] OPERATION SUMMARY')
+      console.log('========================================')
+      console.log(`✅ Restored: ${restoredCount} posts`)
+      console.log(`🗑️  Deleted: ${deletedCount} posts`)
+      console.log(`⏭️  Skipped: ${skippedCount} posts`)
+      console.log('========================================\n')
+
     } else {
-      // No previous upload, delete all posts for this client
+      // No previous upload
+      console.log(`\n⚠️  NO PREVIOUS UPLOAD - Deleting all posts for client "${upload.client.name}"`)
+
+      const postsToDelete = await prisma.post.findMany({
+        where: { clientId: upload.clientId },
+        select: {
+          id: true,
+          typefullyUrl: true,
+          createdAt: true
+        }
+      })
+
+      console.log(`Found ${postsToDelete.length} posts to delete:`)
+      postsToDelete.forEach(post => {
+        console.log(`  - ${post.typefullyUrl.substring(0, 80)} (created ${post.createdAt})`)
+      })
+
       const result = await prisma.post.deleteMany({
         where: {
           clientId: upload.clientId
         }
       })
       deletedCount = result.count
-      console.log(`[Undo Upload] No previous upload found, deleted all ${deletedCount} posts`)
+      console.log(`✅ Deleted ${deletedCount} posts`)
     }
 
     // Delete the upload record
@@ -121,7 +203,7 @@ export async function DELETE(
     })
 
     const message = previousUpload
-      ? `Upload undone successfully. Restored ${restoredCount} posts to previous state and removed ${deletedCount} new posts.`
+      ? `Upload undone successfully. Restored ${restoredCount} posts to previous state and removed ${deletedCount} new posts.${skippedCount > 0 ? ` Skipped ${skippedCount} posts from older uploads.` : ''}`
       : `Upload undone successfully. Deleted ${deletedCount} posts (no previous upload to restore).`
 
     return NextResponse.json({
@@ -129,7 +211,14 @@ export async function DELETE(
       message,
       restoredCount,
       deletedCount,
-      clientName: upload.client.name
+      skippedCount,
+      clientName: upload.client.name,
+      debugInfo: {
+        uploadId: id,
+        previousUploadId: previousUpload?.id || null,
+        currentUploadDate: upload.uploadDate,
+        previousUploadDate: previousUpload?.uploadDate || null
+      }
     })
   } catch (error: any) {
     console.error('Error undoing upload:', error)
