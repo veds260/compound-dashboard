@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { PostStatus } from '@prisma/client'
 
@@ -11,6 +13,20 @@ export async function POST(
     const { token } = params
     const body = await request.json()
     const { status, feedback } = body
+
+    // Check authentication
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    // Only allow CLIENT role to change status via share links
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json(
+        { error: 'Only clients can change post status via share links' },
+        { status: 403 }
+      )
+    }
 
     // Validate status
     if (!status || !['APPROVED', 'REJECTED', 'SUGGEST_CHANGES'].includes(status)) {
@@ -26,7 +42,8 @@ export async function POST(
             id: true,
             name: true,
             twitterHandle: true,
-            profilePicture: true
+            profilePicture: true,
+            userId: true
           }
         }
       }
@@ -34,6 +51,14 @@ export async function POST(
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
+
+    // Verify the logged-in client owns this post
+    if (post.client.userId !== session.user.id) {
+      return NextResponse.json(
+        { error: 'You do not have permission to review this post' },
+        { status: 403 }
+      )
     }
 
     // Prepare update data

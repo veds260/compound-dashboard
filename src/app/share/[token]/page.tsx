@@ -74,6 +74,12 @@ export default function SharedPostPage() {
       return
     }
 
+    // Check if user is a client
+    if (session.user.role !== 'CLIENT') {
+      toast.error('Only clients can change post status via share links')
+      return
+    }
+
     setUpdating(true)
     try {
       const response = await fetch(`/api/share/${token}/status`, {
@@ -83,7 +89,8 @@ export default function SharedPostPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update status')
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update status')
       }
 
       const updatedPost = await response.json()
@@ -100,7 +107,7 @@ export default function SharedPostPage() {
       setFeedbackText('')
     } catch (error) {
       console.error('Error updating status:', error)
-      toast.error('Failed to update status')
+      toast.error(error instanceof Error ? error.message : 'Failed to update status')
     } finally {
       setUpdating(false)
     }
@@ -111,6 +118,13 @@ export default function SharedPostPage() {
       setShowAuthModal(true)
       return
     }
+
+    // Check if user is a client
+    if (session.user.role !== 'CLIENT') {
+      toast.error('Only clients can change post status via share links')
+      return
+    }
+
     setShowFeedbackModal(true)
   }
 
@@ -222,7 +236,8 @@ export default function SharedPostPage() {
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6 sticky top-6">
               <h3 className="text-lg font-bold text-white mb-4">Review Actions</h3>
               <div className="flex flex-col gap-3">
-            {post.status === 'PENDING' && (
+            {/* Show action buttons only for clients and when status is PENDING */}
+            {post.status === 'PENDING' && session?.user?.role === 'CLIENT' && (
               <>
                 <button
                   onClick={() => handleStatusUpdate('APPROVED')}
@@ -251,6 +266,36 @@ export default function SharedPostPage() {
                   Reject
                 </button>
               </>
+            )}
+
+            {/* Show message if user is logged in but not a client */}
+            {post.status === 'PENDING' && session && session.user.role !== 'CLIENT' && (
+              <div className="bg-blue-900/20 border border-blue-800 rounded-xl p-4 text-center">
+                <p className="text-blue-300 text-sm font-medium mb-2">
+                  View Only
+                </p>
+                <p className="text-gray-400 text-xs">
+                  Only the client can review and change the status of this post.
+                </p>
+              </div>
+            )}
+
+            {/* Show message if not logged in and status is pending */}
+            {post.status === 'PENDING' && !session && (
+              <div className="bg-yellow-900/20 border border-yellow-800 rounded-xl p-4 text-center">
+                <p className="text-yellow-300 text-sm font-medium mb-2">
+                  Sign in to Review
+                </p>
+                <p className="text-gray-400 text-xs mb-3">
+                  Login as a client to approve, reject, or suggest changes to this post.
+                </p>
+                <button
+                  onClick={() => router.push(`/login?callbackUrl=${encodeURIComponent(`/share/${token}`)}`)}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm"
+                >
+                  Sign In
+                </button>
+              </div>
             )}
 
             {post.status !== 'PENDING' && (
