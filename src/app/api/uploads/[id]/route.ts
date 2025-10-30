@@ -126,13 +126,13 @@ export async function DELETE(
 
       for (const post of allClientPosts) {
         const postCreatedTime = new Date(post.createdAt).getTime()
-        const createdAfterPrevious = postCreatedTime > previousUploadTime
+        const createdDuringCurrentUpload = postCreatedTime >= currentUploadTime
         const belongsToCurrentUpload = post.uploadId === id
 
         try {
-          if (createdAfterPrevious) {
-            // Post created AFTER previous upload = NEW from current upload
-            console.log(`🗑️  DELETE: Created ${post.createdAt} (after ${previousUpload.uploadDate})`)
+          if (createdDuringCurrentUpload) {
+            // Post created DURING/AFTER current upload = NEW post from this upload
+            console.log(`🗑️  DELETE (NEW): Created ${post.createdAt} >= current upload ${upload.uploadDate}`)
             console.log(`   URL: ${post.typefullyUrl.substring(0, 80)}`)
             console.log(`   UploadId: ${post.uploadId}\n`)
 
@@ -141,8 +141,8 @@ export async function DELETE(
             })
             deletedCount++
           } else if (belongsToCurrentUpload) {
-            // Post created BEFORE/AT previous upload but has current upload's ID = was UPDATED
-            console.log(`♻️  RESTORE: Created ${post.createdAt} (before/at ${previousUpload.uploadDate})`)
+            // Post created BEFORE current upload but has current uploadId = was UPDATED by this upload
+            console.log(`♻️  RESTORE (UPDATED): Created ${post.createdAt} < current upload ${upload.uploadDate}`)
             console.log(`   URL: ${post.typefullyUrl.substring(0, 80)}`)
             console.log(`   UploadId: ${post.uploadId} → ${previousUpload.id}\n`)
 
@@ -152,8 +152,8 @@ export async function DELETE(
             })
             restoredCount++
           } else {
-            // From older upload
-            console.log(`⏭️  SKIP: Created ${post.createdAt}, uploadId: ${post.uploadId}`)
+            // From older upload, leave it alone
+            console.log(`⏭️  SKIP (FROM OLDER UPLOAD): Created ${post.createdAt}, uploadId: ${post.uploadId}`)
             console.log(`   URL: ${post.typefullyUrl.substring(0, 80)}\n`)
             skippedCount++
           }

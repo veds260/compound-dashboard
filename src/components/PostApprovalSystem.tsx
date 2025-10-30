@@ -253,7 +253,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
       const result = await response.json()
       setPostMedia(result.media)
-      toast.success(`Added ${files.length} media item(s)`)
+      const addedCount = result.media.length - postMedia.length
+      toast.success(`Added ${addedCount} media item(s)`)
 
       // Update the post in the list
       await fetchPosts()
