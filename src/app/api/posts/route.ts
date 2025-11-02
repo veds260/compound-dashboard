@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { content, scheduledDate, typefullyUrl, clientId } = await request.json()
+    const { content, tweetText, scheduledDate, typefullyUrl, clientId } = await request.json()
 
     if (!content || !typefullyUrl || !clientId) {
       return NextResponse.json(
@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
     const post = await prisma.post.create({
       data: {
         content,
+        tweetText: tweetText || null,
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
         typefullyUrl,
         clientId,

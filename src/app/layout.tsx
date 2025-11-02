@@ -8,6 +8,10 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata = {
   title: 'Compound Dashboard',
   description: 'Social media analytics and post approval dashboard by Compound',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-icon.png',
+  },
 }
 
 export default function RootLayout({

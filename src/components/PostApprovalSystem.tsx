@@ -88,6 +88,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
@@ -114,12 +115,20 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [newPost, setNewPost] = useState({
     content: '',
+    tweetText: '',
     scheduledDate: null as Date | null,
     typefullyUrl: '',
     clientId: clientId || ''
   })
+  const [bulkPosts, setBulkPosts] = useState<Array<{
+    content: string
+    tweetText: string
+    typefullyUrl: string
+  }>>([])
+  const [bulkClientId, setBulkClientId] = useState<string>(clientId || '')
   const [editPost, setEditPost] = useState({
     content: '',
+    tweetText: '',
     scheduledDate: null as Date | null,
     typefullyUrl: ''
   })
@@ -373,6 +382,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
       const postData = {
         content: newPost.content,
+        tweetText: newPost.tweetText,
         typefullyUrl: newPost.typefullyUrl,
         clientId: newPost.clientId,
         scheduledDate: scheduledDateISO
@@ -394,7 +404,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       const createdPost = await response.json()
       setPosts([createdPost, ...posts])
       setIsModalOpen(false)
-      setNewPost({ content: '', scheduledDate: null, typefullyUrl: '', clientId: clientId || '' })
+      setNewPost({ content: '', tweetText: '', scheduledDate: null, typefullyUrl: '', clientId: clientId || '' })
       toast.success('Post created successfully')
     } catch (error) {
       console.error('Error creating post:', error)
@@ -424,6 +434,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
     setEditPost({
       content: post.content,
+      tweetText: post.tweetText || '',
       scheduledDate: displayDate,
       typefullyUrl: post.typefullyUrl
     })
@@ -457,6 +468,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
       const postData = {
         content: editPost.content,
+        tweetText: editPost.tweetText,
         typefullyUrl: editPost.typefullyUrl,
         scheduledDate: scheduledDateISO
       }
@@ -609,6 +621,127 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     }
   }
 
+  const handleOpenBulkModal = () => {
+    const count = prompt('How many posts do you want to add?')
+    const numPosts = parseInt(count || '0', 10)
+
+    if (isNaN(numPosts) || numPosts <= 0) {
+      toast.error('Please enter a valid number')
+      return
+    }
+
+    if (numPosts > 50) {
+      toast.error('Maximum 50 posts at a time')
+      return
+    }
+
+    // Initialize empty posts
+    const emptyPosts = Array.from({ length: numPosts }, () => ({
+      content: '',
+      tweetText: '',
+      typefullyUrl: ''
+    }))
+
+    setBulkPosts(emptyPosts)
+    setBulkClientId(clientId || '')
+    setIsBulkModalOpen(true)
+  }
+
+  const handleUpdateBulkPost = (index: number, field: string, value: string) => {
+    const updatedPosts = [...bulkPosts]
+    updatedPosts[index] = { ...updatedPosts[index], [field]: value }
+    setBulkPosts(updatedPosts)
+  }
+
+  const handleAddBulkRow = () => {
+    if (bulkPosts.length >= 50) {
+      toast.error('Maximum 50 posts at a time')
+      return
+    }
+    setBulkPosts([...bulkPosts, { content: '', tweetText: '', typefullyUrl: '' }])
+  }
+
+  const handleRemoveBulkRow = (index: number) => {
+    if (bulkPosts.length === 1) {
+      toast.error('Must have at least one post')
+      return
+    }
+    setBulkPosts(bulkPosts.filter((_, i) => i !== index))
+  }
+
+  const handleBulkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!bulkClientId) {
+      toast.error('Please select a client')
+      return
+    }
+
+    // Validate all posts have required fields
+    const invalidPosts = bulkPosts.filter(post => !post.content.trim() || !post.typefullyUrl.trim())
+    if (invalidPosts.length > 0) {
+      toast.error('All posts must have content and Typefully URL')
+      return
+    }
+
+    try {
+      const createdPosts = []
+      let successCount = 0
+      let errorCount = 0
+
+      for (const post of bulkPosts) {
+        try {
+          const response = await fetch('/api/posts', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              content: post.content,
+              tweetText: post.tweetText,
+              typefullyUrl: post.typefullyUrl,
+              clientId: bulkClientId,
+              scheduledDate: ''
+            })
+          })
+
+          if (!response.ok) {
+            throw new Error('Failed to create post')
+          }
+
+          const createdPost = await response.json()
+          createdPosts.push(createdPost)
+          successCount++
+        } catch (error) {
+          console.error('Error creating post:', error)
+          errorCount++
+        }
+      }
+
+      // Add all successfully created posts to the list
+      if (createdPosts.length > 0) {
+        setPosts([...createdPosts, ...posts])
+      }
+
+      // Close modal and reset
+      setIsBulkModalOpen(false)
+      setBulkPosts([])
+      setBulkClientId(clientId || '')
+
+      // Show result
+      if (errorCount === 0) {
+        toast.success(`Successfully created ${successCount} posts`)
+      } else {
+        toast.success(`Created ${successCount} posts (${errorCount} failed)`)
+      }
+
+      fetchPosts()
+    } catch (error) {
+      console.error('Error in bulk submission:', error)
+      toast.error('Failed to create posts')
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     const styles = {
       PENDING: 'bg-suggest-bg text-suggest-text border border-suggest-border',
@@ -697,13 +830,22 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
         </div>
 
         {userRole === 'AGENCY' && (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-theme-accent text-white px-4 py-2 rounded-lg hover:bg-[#C73333] flex items-center space-x-2 transition-all duration-200 opacity-90 hover:opacity-100"
-          >
-            <PlusIcon className="h-5 w-5" />
-            <span>Add Post</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-theme-accent text-white px-4 py-2 rounded-lg hover:bg-[#C73333] flex items-center space-x-2 transition-all duration-200 opacity-90 hover:opacity-100"
+            >
+              <PlusIcon className="h-5 w-5" />
+              <span>Add Post</span>
+            </button>
+            <button
+              onClick={handleOpenBulkModal}
+              className="bg-theme-card border border-theme-accent text-theme-accent px-4 py-2 rounded-lg hover:bg-theme-accent hover:text-white flex items-center space-x-2 transition-all duration-200 opacity-90 hover:opacity-100"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+              <span>Bulk Add</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -1019,6 +1161,21 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Tweet Text (optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={newPost.tweetText}
+                  onChange={(e) => setNewPost({ ...newPost, tweetText: e.target.value })}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
+                  placeholder="Enter the tweet text..."
+                  maxLength={280}
+                />
+                <p className="text-xs text-gray-400 mt-1">{newPost.tweetText.length}/280 characters</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Typefully URL *
                 </label>
                 <input
@@ -1088,6 +1245,21 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Tweet Text (optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={editPost.tweetText}
+                  onChange={(e) => setEditPost({ ...editPost, tweetText: e.target.value })}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
+                  placeholder="Enter the tweet text..."
+                  maxLength={280}
+                />
+                <p className="text-xs text-gray-400 mt-1">{editPost.tweetText.length}/280 characters</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Typefully URL *
                 </label>
                 <input
@@ -1128,6 +1300,136 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                 >
                   Save Changes
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Add Posts Modal */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setIsBulkModalOpen(false)}>
+          <div className="bg-theme-card/95 backdrop-blur-sm rounded-xl p-6 w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-large border border-theme-border flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-white">Bulk Add Posts ({bulkPosts.length})</h3>
+              <button
+                onClick={() => setIsBulkModalOpen(false)}
+                className="text-gray-400 hover:text-gray-300 transition-colors"
+              >
+                <XCircleIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleBulkSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Client *
+                </label>
+                <select
+                  required
+                  value={bulkClientId}
+                  onChange={(e) => setBulkClientId(e.target.value)}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 shadow-sm focus:border-theme-accent focus:ring-theme-accent px-3 py-2"
+                >
+                  <option value="">Select a client</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+                {bulkPosts.map((post, index) => (
+                  <div key={index} className="bg-theme-bg rounded-lg p-4 border border-theme-border relative">
+                    <div className="flex justify-between items-start mb-3">
+                      <h4 className="text-sm font-medium text-gray-300">Post {index + 1}</h4>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveBulkRow(index)}
+                        className="text-red-400 hover:text-red-300 transition-colors"
+                        title="Remove this post"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Post Content *
+                        </label>
+                        <textarea
+                          required
+                          rows={3}
+                          value={post.content}
+                          onChange={(e) => handleUpdateBulkPost(index, 'content', e.target.value)}
+                          className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent p-2"
+                          placeholder="Enter post content..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Tweet Text (optional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={post.tweetText}
+                          onChange={(e) => handleUpdateBulkPost(index, 'tweetText', e.target.value)}
+                          className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent p-2"
+                          placeholder="Enter tweet text..."
+                          maxLength={280}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{post.tweetText.length}/280</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Typefully URL *
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          value={post.typefullyUrl}
+                          onChange={(e) => handleUpdateBulkPost(index, 'typefullyUrl', e.target.value)}
+                          className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent px-2 py-2"
+                          placeholder="https://typefully.com/..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t border-theme-border">
+                <button
+                  type="button"
+                  onClick={handleAddBulkRow}
+                  className="px-4 py-2 bg-theme-bg border border-theme-accent text-theme-accent rounded-md hover:bg-theme-accent hover:text-white opacity-90 hover:opacity-100 transition-colors duration-200 flex items-center space-x-2"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  <span>Add Row</span>
+                </button>
+
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBulkModalOpen(false)
+                      setBulkPosts([])
+                      setBulkClientId(clientId || '')
+                    }}
+                    className="px-4 py-2 border border-theme-border rounded-md text-gray-300 bg-theme-card hover:bg-theme-bg opacity-90 hover:opacity-100 transition-colors duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-theme-accent text-white rounded-md hover:bg-[#C73333] opacity-90 hover:opacity-100 transition-colors duration-200"
+                  >
+                    Create All Posts
+                  </button>
+                </div>
               </div>
             </form>
           </div>
