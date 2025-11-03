@@ -124,6 +124,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     content: string
     tweetText: string
     typefullyUrl: string
+    scheduledDate: Date | null
   }>>([])
   const [bulkClientId, setBulkClientId] = useState<string>(clientId || '')
   const [editPost, setEditPost] = useState({
@@ -639,7 +640,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     const emptyPosts = Array.from({ length: numPosts }, () => ({
       content: '',
       tweetText: '',
-      typefullyUrl: ''
+      typefullyUrl: '',
+      scheduledDate: null
     }))
 
     setBulkPosts(emptyPosts)
@@ -653,12 +655,18 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     setBulkPosts(updatedPosts)
   }
 
+  const handleUpdateBulkPostDate = (index: number, date: Date | null) => {
+    const updatedPosts = [...bulkPosts]
+    updatedPosts[index] = { ...updatedPosts[index], scheduledDate: date }
+    setBulkPosts(updatedPosts)
+  }
+
   const handleAddBulkRow = () => {
     if (bulkPosts.length >= 50) {
       toast.error('Maximum 50 posts at a time')
       return
     }
-    setBulkPosts([...bulkPosts, { content: '', tweetText: '', typefullyUrl: '' }])
+    setBulkPosts([...bulkPosts, { content: '', tweetText: '', typefullyUrl: '', scheduledDate: null }])
   }
 
   const handleRemoveBulkRow = (index: number) => {
@@ -689,8 +697,28 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       let successCount = 0
       let errorCount = 0
 
+      // Get the selected client's timezone for date conversion
+      const selectedClientData = clients.find(c => c.id === bulkClientId)
+      const clientTimezone = selectedClientData?.timezone
+      const timezoneOffset = parseTimezoneOffset(clientTimezone)
+
       for (const post of bulkPosts) {
         try {
+          // Convert scheduled date to UTC if present
+          let scheduledDateISO = ''
+          if (post.scheduledDate) {
+            const localDate = new Date(post.scheduledDate)
+            const year = localDate.getFullYear()
+            const month = localDate.getMonth()
+            const day = localDate.getDate()
+            const hours = localDate.getHours()
+            const minutes = localDate.getMinutes()
+
+            // Create UTC date by subtracting the timezone offset
+            const utcDate = new Date(Date.UTC(year, month, day, hours - timezoneOffset, minutes, 0, 0))
+            scheduledDateISO = utcDate.toISOString()
+          }
+
           const response = await fetch('/api/posts', {
             method: 'POST',
             headers: {
@@ -701,7 +729,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
               tweetText: post.tweetText,
               typefullyUrl: post.typefullyUrl,
               clientId: bulkClientId,
-              scheduledDate: ''
+              scheduledDate: scheduledDateISO
             })
           })
 
@@ -1351,7 +1379,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1">
                           Post Content *
@@ -1391,6 +1419,17 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           onChange={(e) => handleUpdateBulkPost(index, 'typefullyUrl', e.target.value)}
                           className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent px-2 py-2"
                           placeholder="https://typefully.com/..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Schedule (optional)
+                        </label>
+                        <DateTimePicker
+                          value={post.scheduledDate}
+                          onChange={(date) => handleUpdateBulkPostDate(index, date)}
+                          placeholder="Select date/time"
                         />
                       </div>
                     </div>
