@@ -1169,9 +1169,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                   onChange={(e) => setNewPost({ ...newPost, tweetText: e.target.value })}
                   className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
                   placeholder="Enter the tweet text..."
-                  maxLength={280}
                 />
-                <p className="text-xs text-gray-400 mt-1">{newPost.tweetText.length}/280 characters</p>
+                <p className="text-xs text-gray-400 mt-1">{newPost.tweetText.length} characters</p>
               </div>
 
               <div>
@@ -1253,9 +1252,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                   onChange={(e) => setEditPost({ ...editPost, tweetText: e.target.value })}
                   className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
                   placeholder="Enter the tweet text..."
-                  maxLength={280}
                 />
-                <p className="text-xs text-gray-400 mt-1">{editPost.tweetText.length}/280 characters</p>
+                <p className="text-xs text-gray-400 mt-1">{editPost.tweetText.length} characters</p>
               </div>
 
               <div>
@@ -1378,9 +1376,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           onChange={(e) => handleUpdateBulkPost(index, 'tweetText', e.target.value)}
                           className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent p-2"
                           placeholder="Enter tweet text..."
-                          maxLength={280}
                         />
-                        <p className="text-xs text-gray-500 mt-1">{post.tweetText.length}/280</p>
+                        <p className="text-xs text-gray-500 mt-1">{post.tweetText.length} chars</p>
                       </div>
 
                       <div>
