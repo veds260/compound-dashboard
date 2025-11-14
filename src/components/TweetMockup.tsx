@@ -45,8 +45,8 @@ export default function TweetMockup({
     if (threadTweets && threadTweets.length > 0) {
       return threadTweets
     }
-    // Check if tweetText contains multiple lines that look like a thread
-    const lines = tweetText.split('\n\n').filter(line => line.trim().length > 0)
+    // Check if tweetText contains multiple lines that look like a thread (triple line break separates tweets)
+    const lines = tweetText.split('\n\n\n').filter(line => line.trim().length > 0)
     if (lines.length > 1) {
       return lines
     }
