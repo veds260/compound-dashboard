@@ -2029,13 +2029,27 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           </a>
 
                           {(userRole === 'AGENCY' || isAdmin) && (
-                            <button
-                              onClick={() => handleGenerateShareLink(mockupPost.id)}
-                              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium w-full justify-center"
-                            >
-                              <ShareIcon className="w-4 h-4 mr-2" />
-                              <span>{shareUrls[mockupPost.id] ? 'Copy Share Link' : 'Generate Share Link'}</span>
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleGenerateShareLink(mockupPost.id)}
+                                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium w-full justify-center"
+                              >
+                                <ShareIcon className="w-4 h-4 mr-2" />
+                                <span>{shareUrls[mockupPost.id] ? 'Copy Share Link' : 'Generate Share Link'}</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditStatusPost(mockupPost)
+                                  setSelectedStatus(mockupPost.status)
+                                  setStatusFeedback(mockupPost.feedback || '')
+                                  setIsEditStatusModalOpen(true)
+                                }}
+                                className="inline-flex items-center px-4 py-2 bg-theme-bg text-gray-400 border border-theme-border rounded-lg hover:bg-theme-card hover:text-gray-300 transition-colors text-sm font-medium w-full justify-center"
+                              >
+                                <PencilIcon className="w-4 h-4 mr-2" />
+                                <span>Edit Status</span>
+                              </button>
+                            </>
                           )}
                         </div>
 
