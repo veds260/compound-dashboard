@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { format } from 'date-fns'
 import {
   HeartIcon,
@@ -24,6 +24,8 @@ interface TweetMockupProps {
   tweetText: string
   timestamp?: Date
   media?: MediaItem[]
+  isThread?: boolean
+  threadTweets?: string[]
 }
 
 export default function TweetMockup({
@@ -32,9 +34,26 @@ export default function TweetMockup({
   profilePicture,
   tweetText,
   timestamp,
-  media
+  media,
+  isThread = false,
+  threadTweets = []
 }: TweetMockupProps) {
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set())
+
+  // Parse thread from tweetText if it contains line breaks and no explicit threadTweets
+  const parsedThreadTweets = React.useMemo(() => {
+    if (threadTweets && threadTweets.length > 0) {
+      return threadTweets
+    }
+    // Check if tweetText contains multiple lines that look like a thread
+    const lines = tweetText.split('\n\n').filter(line => line.trim().length > 0)
+    if (lines.length > 1) {
+      return lines
+    }
+    return [tweetText]
+  }, [tweetText, threadTweets])
+
+  const isActualThread = parsedThreadTweets.length > 1
 
   const handleImageError = (index: number) => {
     setImageErrors(prev => new Set(prev).add(index))
@@ -89,8 +108,8 @@ export default function TweetMockup({
 
   const stats = generateEngagement()
 
-  return (
-    <div className="bg-black border border-gray-800 rounded-2xl p-5 w-full mx-auto" style={{ maxWidth: '550px' }}>
+  const renderSingleTweet = (content: string, index?: number, total?: number) => (
+    <div key={index} className="bg-black border border-gray-800 rounded-2xl p-5 w-full mx-auto relative" style={{ maxWidth: '550px' }}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start space-x-3 flex-1 min-w-0">
@@ -140,10 +159,20 @@ export default function TweetMockup({
         </button>
       </div>
 
+      {/* Thread Indicator */}
+      {total && total > 1 && (
+        <div className="absolute -left-4 top-16 bottom-16 w-0.5 bg-gray-700"></div>
+      )}
+
       {/* Tweet Content */}
       <div className="mb-4">
+        {total && total > 1 && (
+          <div className="inline-block px-2 py-0.5 bg-gray-800 text-gray-400 text-xs rounded mb-2">
+            {index! + 1}/{total}
+          </div>
+        )}
         <p className="text-white text-[15px] leading-[1.4] whitespace-pre-wrap break-words">
-          {tweetText}
+          {content}
         </p>
       </div>
 
@@ -216,6 +245,27 @@ export default function TweetMockup({
           <ArrowUpTrayIcon className="w-[18px] h-[18px]" />
         </button>
       </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      {isActualThread ? (
+        <>
+          {parsedThreadTweets.map((tweet, index) => (
+            <React.Fragment key={index}>
+              {renderSingleTweet(tweet, index, parsedThreadTweets.length)}
+            </React.Fragment>
+          ))}
+          <div className="text-center">
+            <span className="inline-block px-3 py-1 bg-blue-900/30 text-blue-300 text-xs rounded-full border border-blue-800">
+              Thread: {parsedThreadTweets.length} {parsedThreadTweets.length === 1 ? 'tweet' : 'tweets'}
+            </span>
+          </div>
+        </>
+      ) : (
+        renderSingleTweet(tweetText)
+      )}
     </div>
   )
 }

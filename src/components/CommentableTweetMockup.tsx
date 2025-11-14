@@ -36,6 +36,8 @@ interface CommentableTweetMockupProps {
   onCommentAdded?: () => void
   shareToken?: string
   media?: MediaItem[]
+  isThread?: boolean
+  threadTweets?: string[]
 }
 
 export default function CommentableTweetMockup({
@@ -47,7 +49,9 @@ export default function CommentableTweetMockup({
   timestamp,
   onCommentAdded,
   shareToken,
-  media
+  media,
+  isThread = false,
+  threadTweets = []
 }: CommentableTweetMockupProps) {
   const [comments, setComments] = useState<Comment[]>([])
   const [showCommentButton, setShowCommentButton] = useState(false)

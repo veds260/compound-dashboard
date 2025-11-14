@@ -93,11 +93,15 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false)
+  const [isEditStatusModalOpen, setIsEditStatusModalOpen] = useState(false)
   const [editingPost, setEditingPost] = useState<Post | null>(null)
   const [publishingPost, setPublishingPost] = useState<Post | null>(null)
   const [notingPost, setNotingPost] = useState<Post | null>(null)
+  const [editStatusPost, setEditStatusPost] = useState<Post | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'SUGGEST_CHANGES' | 'PUBLISHED'>('PENDING')
   const [feedbackPost, setFeedbackPost] = useState<{id: string, action: 'SUGGEST_CHANGES' | 'REJECTED'} | null>(null)
   const [feedback, setFeedback] = useState('')
+  const [statusFeedback, setStatusFeedback] = useState('')
   const [tweetUrl, setTweetUrl] = useState('')
   const [writerNote, setWriterNote] = useState('')
   const [shareUrls, setShareUrls] = useState<{ [postId: string]: string }>({})
@@ -301,21 +305,43 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   }
 
   const handleStatusUpdate = async (postId: string, status: string, feedback?: string) => {
+    console.log('[PostApprovalSystem] handleStatusUpdate called:', {
+      postId,
+      status,
+      hasFeedback: !!feedback,
+      feedbackLength: feedback?.length || 0
+    })
+
     try {
+      const requestBody = { status, feedback }
+      console.log('[PostApprovalSystem] Sending status update request:', requestBody)
+
       const response = await fetch(`/api/posts/${postId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ status, feedback })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
         const errorData = await response.json()
+        console.error('[PostApprovalSystem] Status update failed:', {
+          postId,
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        })
         throw new Error(errorData.error || 'Failed to update post status')
       }
 
       const updatedPost = await response.json()
+      console.log('[PostApprovalSystem] Status update successful:', {
+        postId,
+        oldStatus: posts.find(p => p.id === postId)?.status,
+        newStatus: updatedPost.status
+      })
+
       setPosts(posts.map(p => p.id === postId ? updatedPost : p))
 
       // Map status to user-friendly messages
@@ -329,7 +355,12 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
       toast.success(statusMessages[status] || 'Post updated')
     } catch (error) {
-      console.error('Error updating post:', error)
+      console.error('[PostApprovalSystem] Error in handleStatusUpdate:', {
+        postId,
+        status,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
       toast.error(error instanceof Error ? error.message : 'Failed to update post')
     }
   }
@@ -619,6 +650,41 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     } catch (error) {
       console.error('Error adding note:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to add note')
+    }
+  }
+
+  const handleEditStatus = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!editStatusPost) return
+
+    try {
+      const response = await fetch(`/api/posts/${editStatusPost.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: selectedStatus,
+          feedback: statusFeedback.trim() || undefined
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update status')
+      }
+
+      const updatedPost = await response.json()
+      setPosts(posts.map(p => p.id === editStatusPost.id ? updatedPost : p))
+      setIsEditStatusModalOpen(false)
+      setEditStatusPost(null)
+      setSelectedStatus('PENDING')
+      setStatusFeedback('')
+      toast.success('Status updated successfully')
+    } catch (error) {
+      console.error('Error updating status:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update status')
     }
   }
 
@@ -1100,6 +1166,18 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                       className="w-full bg-yellow-900/30 text-yellow-300 border border-yellow-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-900/50 transition-colors duration-200"
                     >
                       Add Note
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setEditStatusPost(post)
+                        setSelectedStatus(post.status)
+                        setStatusFeedback(post.feedback || '')
+                        setIsEditStatusModalOpen(true)
+                      }}
+                      className="w-full bg-theme-bg text-gray-400 border border-theme-border px-4 py-2 rounded-lg text-sm font-medium hover:bg-theme-card hover:text-gray-300 transition-colors duration-200"
+                    >
+                      Edit Status
                     </button>
                   </div>
                 )}
@@ -1627,6 +1705,80 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                   className="px-4 py-2 bg-yellow-900/30 text-yellow-300 border border-yellow-800 rounded-md hover:bg-yellow-900/50 opacity-90 hover:opacity-100 transition-colors duration-200"
                 >
                   Add Note
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Status Modal */}
+      {isEditStatusModalOpen && editStatusPost && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => {
+          setIsEditStatusModalOpen(false)
+          setEditStatusPost(null)
+          setSelectedStatus('PENDING')
+          setStatusFeedback('')
+        }}>
+          <div className="bg-theme-card/95 backdrop-blur-sm rounded-xl p-6 w-full max-w-lg shadow-large border border-theme-border" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-medium text-white mb-4">Edit Post Status</h3>
+
+            <form onSubmit={handleEditStatus} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Status *
+                </label>
+                <select
+                  required
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as any)}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 shadow-sm focus:border-theme-accent focus:ring-theme-accent px-3 py-2"
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="SUGGEST_CHANGES">Suggest Changes</option>
+                  <option value="PUBLISHED">Published</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Manually change post status (e.g., based on external approval)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Feedback / Notes (optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={statusFeedback}
+                  onChange={(e) => setStatusFeedback(e.target.value)}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
+                  placeholder="E.g., 'Client approved via Telegram' or 'Verbal approval from John'"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Optional: Record where/how approval was received
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditStatusModalOpen(false)
+                    setEditStatusPost(null)
+                    setSelectedStatus('PENDING')
+                    setStatusFeedback('')
+                  }}
+                  className="px-4 py-2 border border-theme-border rounded-md text-gray-300 bg-theme-card hover:bg-theme-bg opacity-90 hover:opacity-100 transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-theme-accent text-white rounded-md hover:bg-[#C73333] opacity-90 hover:opacity-100 transition-colors duration-200"
+                >
+                  Update Status
                 </button>
               </div>
             </form>

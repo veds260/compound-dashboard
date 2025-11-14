@@ -5,6 +5,9 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSam
 import toast from 'react-hot-toast'
 import { PencilIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import TweetMockup from './TweetMockup'
+import CommentableTweetMockup from './CommentableTweetMockup'
+import CommentList from './CommentList'
+import DateTimePicker from './DateTimePicker'
 
 interface Post {
   id: string
@@ -89,6 +92,17 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
   const [feedbackAction, setFeedbackAction] = useState<'SUGGEST_CHANGES' | 'REJECTED'>('SUGGEST_CHANGES')
   const [feedback, setFeedback] = useState('')
+  const [postComments, setPostComments] = useState<any[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [postMedia, setPostMedia] = useState<any[]>([])
+  const [isEditStatusModalOpen, setIsEditStatusModalOpen] = useState(false)
+  const [editStatusPost, setEditStatusPost] = useState<Post | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'SUGGEST_CHANGES' | 'PUBLISHED'>('PENDING')
+  const [statusFeedback, setStatusFeedback] = useState('')
+  const [isEditScheduleModalOpen, setIsEditScheduleModalOpen] = useState(false)
+  const [editingSchedulePost, setEditingSchedulePost] = useState<Post | null>(null)
+  const [editedScheduleDate, setEditedScheduleDate] = useState<Date | null>(null)
+  const [draggedPost, setDraggedPost] = useState<Post | null>(null)
 
   // Get posts grouped by date (using each post's client timezone)
   const postsByDate = useMemo(() => {
@@ -163,7 +177,240 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
   const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
   const handleToday = () => setCurrentMonth(new Date())
 
-  const closeModal = () => setSelectedPost(null)
+  const fetchComments = async (postId: string) => {
+    setCommentsLoading(true)
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`)
+      if (response.ok) {
+        const data = await response.json()
+        setPostComments(data)
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    } finally {
+      setCommentsLoading(false)
+    }
+  }
+
+  const handleOpenPostModal = (post: Post) => {
+    setSelectedPost(post)
+    fetchComments(post.id)
+    // Parse media if it exists
+    if (post.media) {
+      try {
+        const parsedMedia = JSON.parse(post.media)
+        setPostMedia(parsedMedia)
+      } catch (error) {
+        console.error('Error parsing media:', error)
+        setPostMedia([])
+      }
+    } else {
+      setPostMedia([])
+    }
+  }
+
+  const handleEditStatus = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!editStatusPost) {
+      console.error('[PostCalendar] handleEditStatus: No post selected')
+      return
+    }
+
+    console.log('[PostCalendar] Updating status:', {
+      postId: editStatusPost.id,
+      newStatus: selectedStatus,
+      feedback: statusFeedback
+    })
+
+    try {
+      const response = await fetch(`/api/posts/${editStatusPost.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: selectedStatus,
+          feedback: statusFeedback.trim() || undefined
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('[PostCalendar] Status update failed:', errorData)
+        throw new Error(errorData.error || 'Failed to update status')
+      }
+
+      console.log('[PostCalendar] Status updated successfully')
+      toast.success('Status updated successfully')
+      setIsEditStatusModalOpen(false)
+      setEditStatusPost(null)
+      setSelectedStatus('PENDING')
+      setStatusFeedback('')
+      if (onPostUpdate) onPostUpdate()
+    } catch (error) {
+      console.error('[PostCalendar] Error updating status:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update status')
+    }
+  }
+
+  const handleEditSchedule = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!editingSchedulePost || !editedScheduleDate) {
+      console.error('[PostCalendar] handleEditSchedule: Missing post or date')
+      return
+    }
+
+    console.log('[PostCalendar] Updating schedule:', {
+      postId: editingSchedulePost.id,
+      newDate: editedScheduleDate,
+      timezone: editingSchedulePost.client?.timezone
+    })
+
+    try {
+      // Convert selected date/time to UTC using client's timezone
+      const timezoneOffset = parseTimezoneOffset(editingSchedulePost.client?.timezone)
+      const localDate = new Date(editedScheduleDate)
+      const year = localDate.getFullYear()
+      const month = localDate.getMonth()
+      const day = localDate.getDate()
+      const hours = localDate.getHours()
+      const minutes = localDate.getMinutes()
+
+      // Create UTC date by subtracting the timezone offset
+      const utcDate = new Date(Date.UTC(year, month, day, hours - timezoneOffset, minutes, 0, 0))
+      const scheduledDateISO = utcDate.toISOString()
+
+      console.log('[PostCalendar] Converted dates:', {
+        local: localDate.toISOString(),
+        utc: scheduledDateISO,
+        offset: timezoneOffset
+      })
+
+      const response = await fetch(`/api/posts/${editingSchedulePost.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          scheduledDate: scheduledDateISO
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('[PostCalendar] Schedule update failed:', errorData)
+        throw new Error(errorData.error || 'Failed to update schedule')
+      }
+
+      console.log('[PostCalendar] Schedule updated successfully')
+      toast.success('Schedule updated successfully')
+      setIsEditScheduleModalOpen(false)
+      setEditingSchedulePost(null)
+      setEditedScheduleDate(null)
+      if (onPostUpdate) onPostUpdate()
+    } catch (error) {
+      console.error('[PostCalendar] Error updating schedule:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update schedule')
+    }
+  }
+
+  const handleDragStart = (post: Post) => {
+    console.log('[PostCalendar] Drag started:', post.id)
+    setDraggedPost(post)
+  }
+
+  const handleDragEnd = () => {
+    console.log('[PostCalendar] Drag ended')
+    setDraggedPost(null)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = async (targetDate: Date) => {
+    if (!draggedPost) {
+      console.warn('[PostCalendar] handleDrop: No dragged post')
+      return
+    }
+
+    console.log('[PostCalendar] Drop started:', {
+      postId: draggedPost.id,
+      targetDate: targetDate.toISOString()
+    })
+
+    try {
+      // Get the original time from the dragged post
+      const originalDate = draggedPost.scheduledDate ? new Date(draggedPost.scheduledDate) : new Date()
+      const timezoneOffset = parseTimezoneOffset(draggedPost.client?.timezone)
+
+      // Convert UTC to local time to get the original hours/minutes
+      const utcDate = new Date(originalDate)
+      const year = utcDate.getUTCFullYear()
+      const month = utcDate.getUTCMonth()
+      const day = utcDate.getUTCDate()
+      const hours = utcDate.getUTCHours()
+      const minutes = utcDate.getUTCMinutes()
+      const localHours = hours + timezoneOffset
+      const localDate = new Date(year, month, day, localHours, minutes)
+
+      // Create new date with target day but original time
+      const newDate = new Date(targetDate)
+      newDate.setHours(localDate.getHours())
+      newDate.setMinutes(localDate.getMinutes())
+
+      // Convert back to UTC
+      const newYear = newDate.getFullYear()
+      const newMonth = newDate.getMonth()
+      const newDay = newDate.getDate()
+      const newHours = newDate.getHours()
+      const newMinutes = newDate.getMinutes()
+      const newUtcDate = new Date(Date.UTC(newYear, newMonth, newDay, newHours - timezoneOffset, newMinutes, 0, 0))
+      const scheduledDateISO = newUtcDate.toISOString()
+
+      console.log('[PostCalendar] Drag-and-drop date conversion:', {
+        originalUTC: originalDate.toISOString(),
+        originalLocal: localDate.toISOString(),
+        targetDate: targetDate.toISOString(),
+        newLocal: newDate.toISOString(),
+        newUTC: scheduledDateISO,
+        preservedTime: `${localDate.getHours()}:${localDate.getMinutes()}`
+      })
+
+      const response = await fetch(`/api/posts/${draggedPost.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          scheduledDate: scheduledDateISO
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('[PostCalendar] Drag-and-drop update failed:', errorData)
+        throw new Error(errorData.error || 'Failed to update schedule')
+      }
+
+      console.log('[PostCalendar] Post rescheduled successfully')
+      toast.success(`Post rescheduled to ${format(newDate, 'MMM d, yyyy')}`)
+      setDraggedPost(null)
+      if (onPostUpdate) onPostUpdate()
+    } catch (error) {
+      console.error('[PostCalendar] Error during drag-and-drop:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to reschedule post')
+      setDraggedPost(null)
+    }
+  }
+
+  const closeModal = () => {
+    setSelectedPost(null)
+    setPostComments([])
+    setPostMedia([])
+  }
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -249,7 +496,19 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                 key={idx}
                 className={`border-r border-b border-theme-border p-2 min-h-[120px] ${
                   !isCurrentMonth ? 'bg-theme-bg/50' : 'bg-theme-card'
-                } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
+                } ${idx % 7 === 6 ? 'border-r-0' : ''} ${draggedPost ? 'transition-colors' : ''}`}
+                onDragOver={handleDragOver}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  handleDrop(day)
+                }}
+                style={{
+                  backgroundColor: draggedPost ? (
+                    isSameDay(day, new Date(draggedPost.scheduledDate || ''))
+                      ? undefined
+                      : 'rgba(239, 68, 68, 0.1)'
+                  ) : undefined
+                }}
               >
                 {/* Date number */}
                 <div className="flex justify-end mb-1">
@@ -280,10 +539,15 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                       return (
                         <button
                           key={post.id}
-                          onClick={() => setSelectedPost(post)}
+                          onClick={() => handleOpenPostModal(post)}
+                          draggable={userRole === 'AGENCY' || userRole === 'ADMIN'}
+                          onDragStart={() => handleDragStart(post)}
+                          onDragEnd={handleDragEnd}
                           className={`w-full text-left p-2 rounded-lg border transition-all hover:shadow-md ${getStatusColor(
                             post.status
-                          )}`}
+                          )} ${userRole === 'AGENCY' || userRole === 'ADMIN' ? 'cursor-move' : 'cursor-pointer'} ${
+                            draggedPost?.id === post.id ? 'opacity-50 scale-95' : ''
+                          }`}
                         >
                           {/* Time */}
                           <div className="text-xs font-semibold mb-0.5">
@@ -332,14 +596,36 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                         {hasTweetText ? 'Tweet Preview' : 'Content Overview'}
                       </h4>
                       {hasTweetText ? (
-                        <TweetMockup
-                          clientName={selectedPost.client?.name || 'Client'}
-                          twitterHandle={selectedPost.client?.twitterHandle}
-                          profilePicture={selectedPost.client?.profilePicture}
-                          tweetText={selectedPost.tweetText || ''}
-                          timestamp={selectedPost.scheduledDate ? new Date(selectedPost.scheduledDate) : undefined}
-                          media={selectedPost.media ? JSON.parse(selectedPost.media) : []}
-                        />
+                        <>
+                          <CommentableTweetMockup
+                            postId={selectedPost.id}
+                            clientName={selectedPost.client?.name || 'Client'}
+                            twitterHandle={selectedPost.client?.twitterHandle}
+                            profilePicture={selectedPost.client?.profilePicture}
+                            tweetText={selectedPost.tweetText || ''}
+                            timestamp={selectedPost.scheduledDate ? new Date(selectedPost.scheduledDate) : undefined}
+                            media={postMedia}
+                            onCommentAdded={() => fetchComments(selectedPost.id)}
+                          />
+
+                          {/* Comments Section Below Tweet */}
+                          <div className="mt-6">
+                            <h4 className="text-sm font-medium text-gray-400 mb-3">Comments</h4>
+                            <div className="bg-theme-bg rounded-lg border border-theme-border p-4">
+                              {commentsLoading ? (
+                                <div className="text-center py-4">
+                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+                                </div>
+                              ) : (
+                                <CommentList
+                                  comments={postComments}
+                                  onCommentUpdate={() => fetchComments(selectedPost.id)}
+                                  currentUserId={''}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </>
                       ) : (
                         <div className="space-y-4">
                           <div className="p-6 bg-theme-bg rounded-lg border border-theme-border">
@@ -386,7 +672,24 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                         {/* Scheduled Date */}
                         {selectedPost.scheduledDate && (
                           <div>
-                            <dt className="text-xs font-medium text-gray-500 mb-1">Scheduled For</dt>
+                            <dt className="text-xs font-medium text-gray-500 mb-1 flex items-center justify-between">
+                              <span>Scheduled For</span>
+                              {userRole === 'AGENCY' && (
+                                <button
+                                  onClick={() => {
+                                    const postTimezone = selectedPost.client?.timezone || clientTimezone
+                                    const localDate = convertToLocalTimezone(selectedPost.scheduledDate!, postTimezone)
+                                    setEditingSchedulePost(selectedPost)
+                                    setEditedScheduleDate(localDate)
+                                    setIsEditScheduleModalOpen(true)
+                                  }}
+                                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center"
+                                >
+                                  <PencilIcon className="w-3 h-3 mr-1" />
+                                  Edit
+                                </button>
+                              )}
+                            </dt>
                             <dd className="text-sm text-gray-300">
                               {(() => {
                                 const postTimezone = selectedPost.client?.timezone || clientTimezone
@@ -433,6 +736,24 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                             <ArrowTopRightOnSquareIcon className="w-4 h-4 ml-2" />
                           </a>
                         </div>
+
+                        {/* Edit Status button for AGENCY */}
+                        {userRole === 'AGENCY' && (
+                          <div className="pt-2">
+                            <button
+                              onClick={() => {
+                                setEditStatusPost(selectedPost)
+                                setSelectedStatus(selectedPost.status)
+                                setStatusFeedback(selectedPost.feedback || '')
+                                setIsEditStatusModalOpen(true)
+                              }}
+                              className="inline-flex items-center px-4 py-2 bg-theme-bg text-gray-400 border border-theme-border rounded-lg hover:bg-theme-card hover:text-gray-300 transition-colors text-sm font-medium w-full justify-center"
+                            >
+                              <PencilIcon className="w-4 h-4 mr-2" />
+                              <span>Edit Status</span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* Client approval buttons */}
                         {userRole === 'CLIENT' && selectedPost.status === 'PENDING' && (
@@ -569,6 +890,131 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                   }`}
                 >
                   Submit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Status Modal */}
+      {isEditStatusModalOpen && editStatusPost && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => {
+          setIsEditStatusModalOpen(false)
+          setEditStatusPost(null)
+          setSelectedStatus('PENDING')
+          setStatusFeedback('')
+        }}>
+          <div className="bg-theme-card/95 backdrop-blur-sm rounded-xl p-6 w-full max-w-lg shadow-large border border-theme-border" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-medium text-white mb-4">Edit Post Status</h3>
+
+            <form onSubmit={handleEditStatus} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Status *
+                </label>
+                <select
+                  required
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as any)}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 shadow-sm focus:border-theme-accent focus:ring-theme-accent px-3 py-2"
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="SUGGEST_CHANGES">Suggest Changes</option>
+                  <option value="PUBLISHED">Published</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Manually change post status (e.g., based on external approval)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Feedback / Notes (optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={statusFeedback}
+                  onChange={(e) => setStatusFeedback(e.target.value)}
+                  className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
+                  placeholder="E.g., 'Client approved via Telegram' or 'Verbal approval from John'"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Optional: Record where/how approval was received
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditStatusModalOpen(false)
+                    setEditStatusPost(null)
+                    setSelectedStatus('PENDING')
+                    setStatusFeedback('')
+                  }}
+                  className="px-4 py-2 border border-theme-border rounded-md text-gray-300 bg-theme-card hover:bg-theme-bg opacity-90 hover:opacity-100 transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-theme-accent text-white rounded-md hover:bg-[#C73333] opacity-90 hover:opacity-100 transition-colors duration-200"
+                >
+                  Update Status
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Schedule Modal */}
+      {isEditScheduleModalOpen && editingSchedulePost && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => {
+          setIsEditScheduleModalOpen(false)
+          setEditingSchedulePost(null)
+          setEditedScheduleDate(null)
+        }}>
+          <div className="bg-theme-card/95 backdrop-blur-sm rounded-xl p-6 w-full max-w-lg shadow-large border border-theme-border" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-medium text-white mb-4">Edit Schedule</h3>
+
+            <form onSubmit={handleEditSchedule} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Scheduled Date & Time *
+                </label>
+                <DateTimePicker
+                  selected={editedScheduleDate}
+                  onChange={(date: Date | null) => setEditedScheduleDate(date)}
+                  timezone={editingSchedulePost.client?.timezone || clientTimezone}
+                  minDate={new Date()}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Time shown in {editingSchedulePost.client?.timezone || clientTimezone}
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditScheduleModalOpen(false)
+                    setEditingSchedulePost(null)
+                    setEditedScheduleDate(null)
+                  }}
+                  className="px-4 py-2 border border-theme-border rounded-md text-gray-300 bg-theme-card hover:bg-theme-bg opacity-90 hover:opacity-100 transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editedScheduleDate}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed opacity-90 hover:opacity-100 transition-colors duration-200"
+                >
+                  Update Schedule
                 </button>
               </div>
             </form>
