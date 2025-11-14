@@ -987,10 +987,9 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                   Scheduled Date & Time *
                 </label>
                 <DateTimePicker
-                  selected={editedScheduleDate}
+                  value={editedScheduleDate}
                   onChange={(date: Date | null) => setEditedScheduleDate(date)}
-                  timezone={editingSchedulePost.client?.timezone || clientTimezone}
-                  minDate={new Date()}
+                  placeholder="Select date and time"
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   Time shown in {editingSchedulePost.client?.timezone || clientTimezone}
