@@ -32,7 +32,7 @@ interface Post {
 
 interface PostCalendarProps {
   posts: Post[]
-  userRole: 'AGENCY' | 'CLIENT'
+  userRole: 'AGENCY' | 'CLIENT' | 'ADMIN'
   clientTimezone?: string
   onEditPost?: (post: Post) => void
   onViewPost?: (post: Post) => void
