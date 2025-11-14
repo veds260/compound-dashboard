@@ -1874,14 +1874,12 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                             </div>
                           </div>
                         ) : (
-                          <CommentableTweetMockup
-                            postId={mockupPost.id}
+                          <TweetMockup
                             clientName={mockupPost.client?.name || 'Client'}
                             twitterHandle={mockupPost.client?.twitterHandle}
                             profilePicture={mockupPost.client?.profilePicture}
                             tweetText={mockupPost.tweetText || ''}
                             timestamp={mockupPost.scheduledDate ? new Date(mockupPost.scheduledDate) : undefined}
-                            onCommentAdded={() => fetchComments(mockupPost.id)}
                             media={postMedia}
                           />
                         )
