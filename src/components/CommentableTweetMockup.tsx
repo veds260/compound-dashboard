@@ -24,6 +24,7 @@ interface MediaItem {
   type: string
   data: string
   name?: string
+  tweetIndex?: number // Which tweet in a thread this media belongs to (0-based)
 }
 
 interface CommentableTweetMockupProps {

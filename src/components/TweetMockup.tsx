@@ -15,6 +15,7 @@ interface MediaItem {
   type: string
   data: string
   name?: string
+  tweetIndex?: number // Which tweet in a thread this media belongs to (0-based)
 }
 
 interface TweetMockupProps {
@@ -108,7 +109,15 @@ export default function TweetMockup({
 
   const stats = generateEngagement()
 
-  const renderSingleTweet = (content: string, index?: number, total?: number) => (
+  const renderSingleTweet = (content: string, index?: number, total?: number) => {
+    // Filter media for this specific tweet index
+    // If tweetIndex is not specified on media, default to 0 (first tweet) for backward compatibility
+    const tweetMedia = media ? media.filter(item => {
+      const itemIndex = item.tweetIndex !== undefined ? item.tweetIndex : 0
+      return itemIndex === (index !== undefined ? index : 0)
+    }) : []
+
+    return (
     <div key={index} className="bg-black border border-gray-800 rounded-2xl p-5 w-full mx-auto relative" style={{ maxWidth: '550px' }}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
@@ -176,30 +185,30 @@ export default function TweetMockup({
         </p>
       </div>
 
-      {/* Media Gallery */}
-      {media && media.length > 0 && (
+      {/* Media Gallery - Only show media for this specific tweet */}
+      {tweetMedia && tweetMedia.length > 0 && (
         <div className={`mb-4 rounded-2xl overflow-hidden border border-gray-800 ${
-          media.length === 1 ? '' :
-          media.length === 2 ? 'grid grid-cols-2 gap-0.5' :
-          media.length === 3 ? 'grid grid-cols-2 grid-rows-2 gap-0.5' :
+          tweetMedia.length === 1 ? '' :
+          tweetMedia.length === 2 ? 'grid grid-cols-2 gap-0.5' :
+          tweetMedia.length === 3 ? 'grid grid-cols-2 grid-rows-2 gap-0.5' :
           'grid grid-cols-2 gap-0.5'
         }`}>
-          {media.map((item, index) => (
+          {tweetMedia.map((item, mediaIndex) => (
             <div
-              key={index}
+              key={mediaIndex}
               className={`relative ${
-                media.length === 3 && index === 0 ? 'row-span-2' : ''
+                tweetMedia.length === 3 && mediaIndex === 0 ? 'row-span-2' : ''
               }`}
               style={{
-                paddingBottom: media.length === 1 ? '56.25%' : '75%'
+                paddingBottom: tweetMedia.length === 1 ? '56.25%' : '75%'
               }}
             >
-              {!imageErrors.has(index) ? (
+              {!imageErrors.has(mediaIndex) ? (
                 <img
                   src={item.data}
-                  alt={item.name || `Media ${index + 1}`}
+                  alt={item.name || `Media ${mediaIndex + 1}`}
                   className="absolute inset-0 w-full h-full object-cover"
-                  onError={() => handleImageError(index)}
+                  onError={() => handleImageError(mediaIndex)}
                 />
               ) : (
                 <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center text-center p-4">
@@ -247,6 +256,7 @@ export default function TweetMockup({
       </div>
     </div>
   )
+  }
 
   return (
     <div className="space-y-4">

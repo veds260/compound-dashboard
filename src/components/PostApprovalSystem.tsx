@@ -113,6 +113,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [editedTweetText, setEditedTweetText] = useState('')
   const [uploadingMedia, setUploadingMedia] = useState(false)
   const [postMedia, setPostMedia] = useState<any[]>([])
+  const [selectedTweetIndex, setSelectedTweetIndex] = useState<number>(0) // For thread media upload
   const [selectedClient, setSelectedClient] = useState<string>(clientId || '')
   const [clients, setClients] = useState<{id: string, name: string, timezone?: string}[]>([])
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL')
@@ -199,6 +200,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     setIsMockupModalOpen(true)
     setIsEditingTweet(false)
     setEditedTweetText(post.tweetText || '')
+    setSelectedTweetIndex(0) // Reset to first tweet
     fetchComments(post.id)
     // Parse media if it exists
     if (post.media) {
@@ -254,6 +256,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       Array.from(files).forEach(file => {
         formData.append('files', file)
       })
+      // Add the tweet index for thread support
+      formData.append('tweetIndex', selectedTweetIndex.toString())
 
       const response = await fetch(`/api/posts/${mockupPost.id}/media`, {
         method: 'POST',
@@ -268,7 +272,16 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       const result = await response.json()
       setPostMedia(result.media)
       const addedCount = result.media.length - postMedia.length
-      toast.success(`Added ${addedCount} media item(s)`)
+
+      // Parse thread to get tweet count for better messaging
+      const threadTweets = mockupPost.tweetText ? mockupPost.tweetText.split('\n\n\n').filter(t => t.trim().length > 0) : []
+      const isThread = threadTweets.length > 1
+
+      if (isThread) {
+        toast.success(`Added ${addedCount} media item(s) to tweet ${selectedTweetIndex + 1}`)
+      } else {
+        toast.success(`Added ${addedCount} media item(s)`)
+      }
 
       // Update the post in the list
       await fetchPosts()
@@ -1968,6 +1981,31 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           <div className="space-y-2 pb-4 border-b border-theme-border">
                             <h4 className="text-xs font-medium text-gray-500 mb-2">Media ({postMedia.length}/4)</h4>
 
+                            {/* Thread Tweet Selector - Show only if this is a thread */}
+                            {(() => {
+                              const threadTweets = mockupPost.tweetText ? mockupPost.tweetText.split('\n\n\n').filter(t => t.trim().length > 0) : []
+                              const isThread = threadTweets.length > 1
+
+                              return isThread && (
+                                <div className="mb-3">
+                                  <label className="block text-xs font-medium text-gray-400 mb-1">
+                                    Select tweet to add media:
+                                  </label>
+                                  <select
+                                    value={selectedTweetIndex}
+                                    onChange={(e) => setSelectedTweetIndex(parseInt(e.target.value, 10))}
+                                    className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 text-sm focus:border-theme-accent focus:ring-theme-accent px-3 py-2"
+                                  >
+                                    {threadTweets.map((tweet, idx) => (
+                                      <option key={idx} value={idx}>
+                                        Tweet {idx + 1} - {tweet.substring(0, 50)}{tweet.length > 50 ? '...' : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )
+                            })()}
+
                             {/* Media Grid */}
                             {postMedia.length > 0 && (
                               <div className="grid grid-cols-2 gap-2 mb-2">
@@ -1978,6 +2016,12 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                                       alt={item.name || `Media ${index + 1}`}
                                       className="w-full h-20 object-cover rounded-lg border border-theme-border"
                                     />
+                                    {/* Show badge indicating which tweet this media belongs to */}
+                                    {item.tweetIndex !== undefined && (
+                                      <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded">
+                                        #{item.tweetIndex + 1}
+                                      </div>
+                                    )}
                                     <button
                                       onClick={() => handleDeleteMedia(index)}
                                       className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"

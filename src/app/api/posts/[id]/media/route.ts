@@ -17,6 +17,7 @@ export async function POST(
 
     const formData = await request.formData()
     const files = formData.getAll('files') as File[]
+    const tweetIndexStr = formData.get('tweetIndex') as string | null
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: 'No files provided' }, { status: 400 })
@@ -33,6 +34,9 @@ export async function POST(
 
     // Parse existing media
     const existingMedia = post.media ? JSON.parse(post.media) : []
+
+    // Determine which tweet this media belongs to (default to 0 for backward compatibility)
+    const tweetIndex = tweetIndexStr !== null ? parseInt(tweetIndexStr, 10) : 0
 
     // Check if adding these files would exceed the limit
     if (existingMedia.length + files.length > 4) {
@@ -82,7 +86,8 @@ export async function POST(
       newMedia.push({
         type: 'image',
         data: dataUrl,
-        name: file.name
+        name: file.name,
+        tweetIndex: tweetIndex // Add tweet index to media item
       })
     }
 
@@ -95,7 +100,7 @@ export async function POST(
       data: { media: JSON.stringify(updatedMedia) }
     })
 
-    console.log(`[Media Upload] Added ${newMedia.length} media item(s) to post ${params.id}`)
+    console.log(`[Media Upload] Added ${newMedia.length} media item(s) to post ${params.id}, tweet index: ${tweetIndex}`)
 
     return NextResponse.json({
       success: true,
