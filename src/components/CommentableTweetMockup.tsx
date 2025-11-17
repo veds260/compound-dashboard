@@ -72,6 +72,7 @@ export default function CommentableTweetMockup({
     y: number
     relativeX: number
     relativeY: number
+    showBelow?: boolean
   } | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -97,52 +98,81 @@ export default function CommentableTweetMockup({
   }
 
   const handleTextSelection = () => {
-    const selectedText = window.getSelection()?.toString().trim()
+    try {
+      const selectedText = window.getSelection()?.toString().trim()
 
-    if (selectedText && selectedText.length > 0 && contentRef.current) {
-      const range = window.getSelection()?.getRangeAt(0)
-      if (!range) return
+      if (selectedText && selectedText.length > 0 && contentRef.current) {
+        const range = window.getSelection()?.getRangeAt(0)
+        if (!range) return
 
-      // Calculate position for button
-      const rect = range.getBoundingClientRect()
-      const containerRect = contentRef.current.getBoundingClientRect()
+        // Calculate position for button
+        const rect = range.getBoundingClientRect()
+        const containerRect = contentRef.current.getBoundingClientRect()
 
-      // Get the text offsets relative to the tweet text
-      const fullText = tweetText
-      const startOffset = fullText.indexOf(selectedText)
-      const endOffset = startOffset + selectedText.length
+        // Get the text offsets relative to the tweet text
+        const fullText = tweetText
+        const startOffset = fullText.indexOf(selectedText)
+        const endOffset = startOffset + selectedText.length
 
-      if (startOffset !== -1) {
-        // Use viewport coordinates for fixed positioning
-        const viewportX = rect.left + rect.width / 2
-        const viewportY = rect.top - 10
+        if (startOffset !== -1) {
+          // Use viewport coordinates for fixed positioning
+          const popupWidth = 320 // w-80 = 20rem = 320px
+          const popupHeight = 280 // Estimated height
 
-        setSelection({
-          text: selectedText,
-          startOffset,
-          endOffset,
-          x: viewportX,
-          y: viewportY,
-          // Also store relative coordinates for the button
-          relativeX: rect.left - containerRect.left + rect.width / 2,
-          relativeY: rect.top - containerRect.top - 10
-        })
-        setShowCommentButton(true)
+          let viewportX = rect.left + rect.width / 2
+          let viewportY = rect.top - 10
+
+          // Clamp X to keep popup within viewport
+          const minX = popupWidth / 2 + 10
+          const maxX = window.innerWidth - popupWidth / 2 - 10
+          viewportX = Math.max(minX, Math.min(maxX, viewportX))
+
+          // Ensure popup doesn't go above viewport
+          const minY = popupHeight + 20
+          let showBelow = false
+          if (viewportY < minY) {
+            // Position below selection instead
+            viewportY = rect.bottom + 10
+            showBelow = true
+          }
+
+          setSelection({
+            text: selectedText,
+            startOffset,
+            endOffset,
+            x: viewportX,
+            y: viewportY,
+            // Also store relative coordinates for the button
+            relativeX: rect.left - containerRect.left + rect.width / 2,
+            relativeY: rect.top - containerRect.top - 10,
+            showBelow
+          })
+          setShowCommentButton(true)
+          setShowCommentPopup(false)
+        }
+      } else {
+        setShowCommentButton(false)
         setShowCommentPopup(false)
       }
-    } else {
+    } catch (error) {
+      console.error('Error handling text selection:', error)
       setShowCommentButton(false)
       setShowCommentPopup(false)
     }
   }
 
   const handleOpenCommentPopup = () => {
-    setShowCommentButton(false)
-    setShowCommentPopup(true)
-    // Focus textarea after popup opens
-    setTimeout(() => {
-      textareaRef.current?.focus()
-    }, 100)
+    try {
+      setShowCommentButton(false)
+      setShowCommentPopup(true)
+      // Focus textarea after popup opens
+      setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 100)
+    } catch (error) {
+      console.error('Error opening comment popup:', error)
+      toast.error('Failed to open comment dialog')
+    }
   }
 
   const handleAddComment = async () => {
@@ -204,12 +234,16 @@ export default function CommentableTweetMockup({
   }
 
   const handleCancelComment = () => {
-    setShowCommentButton(false)
-    setShowCommentPopup(false)
-    setSelection(null)
-    setCommentText('')
-    setGuestName('')
-    window.getSelection()?.removeAllRanges()
+    try {
+      setShowCommentButton(false)
+      setShowCommentPopup(false)
+      setSelection(null)
+      setCommentText('')
+      setGuestName('')
+      window.getSelection()?.removeAllRanges()
+    } catch (error) {
+      console.error('Error canceling comment:', error)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -437,7 +471,9 @@ export default function CommentableTweetMockup({
           style={{
             left: `${selection.x}px`,
             top: `${selection.y}px`,
-            transform: 'translate(-50%, calc(-100% - 10px))'
+            transform: selection.showBelow
+              ? 'translate(-50%, 0)'
+              : 'translate(-50%, calc(-100% - 10px))'
           }}
         >
           <div className="flex items-start justify-between mb-3">
