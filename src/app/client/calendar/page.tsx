@@ -119,6 +119,7 @@ export default function ClientCalendarPage() {
           posts={posts}
           userRole="CLIENT"
           clientTimezone={clientTimezone}
+          clientId={session?.user?.clientId}
           onEditPost={() => {}}
           onPostUpdate={fetchPosts}
         />

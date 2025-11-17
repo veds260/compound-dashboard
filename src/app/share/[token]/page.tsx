@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import CommentableTweetMockup from '@/components/CommentableTweetMockup'
+import CommentList from '@/components/CommentList'
 import { CheckCircleIcon, XCircleIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import toast from 'react-hot-toast'
 
@@ -37,6 +38,8 @@ export default function SharedPostPage() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const [comments, setComments] = useState<any[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
 
   useEffect(() => {
     fetchPost()
@@ -58,10 +61,30 @@ export default function SharedPostPage() {
       const data = await response.json()
       setPost(data)
       setLoading(false)
+
+      // Fetch comments after loading post
+      if (data && data.tweetText) {
+        fetchComments()
+      }
     } catch (error) {
       console.error('Error fetching post:', error)
       setError('Failed to load post.')
       setLoading(false)
+    }
+  }
+
+  const fetchComments = async () => {
+    setCommentsLoading(true)
+    try {
+      const response = await fetch(`/api/share/${token}/comments`)
+      if (response.ok) {
+        const data = await response.json()
+        setComments(data)
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    } finally {
+      setCommentsLoading(false)
     }
   }
 
@@ -137,8 +160,8 @@ export default function SharedPostPage() {
   }
 
   const handleCommentsUpdate = () => {
-    // Refresh post data when comments are added
-    fetchPost()
+    // Refresh comments when a new comment is added
+    fetchComments()
   }
 
   if (loading) {
@@ -210,18 +233,36 @@ export default function SharedPostPage() {
           {/* Tweet Mockup or Content */}
           <div className="flex-1">
             {hasTweetText ? (
-              <div className="flex justify-center lg:justify-start">
-                <CommentableTweetMockup
-                  postId={post.id}
-                  clientName={post.client.name}
-                  twitterHandle={post.client.twitterHandle || undefined}
-                  profilePicture={post.client.profilePicture || undefined}
-                  tweetText={post.tweetText || ''}
-                  timestamp={post.scheduledDate ? new Date(post.scheduledDate) : undefined}
-                  onCommentAdded={handleCommentsUpdate}
-                  shareToken={token}
-                  media={post.media ? JSON.parse(post.media) : []}
-                />
+              <div className="space-y-6">
+                <div className="flex justify-center lg:justify-start">
+                  <CommentableTweetMockup
+                    postId={post.id}
+                    clientName={post.client.name}
+                    twitterHandle={post.client.twitterHandle || undefined}
+                    profilePicture={post.client.profilePicture || undefined}
+                    tweetText={post.tweetText || ''}
+                    timestamp={post.scheduledDate ? new Date(post.scheduledDate) : undefined}
+                    onCommentAdded={handleCommentsUpdate}
+                    shareToken={token}
+                    media={post.media ? JSON.parse(post.media) : []}
+                  />
+                </div>
+
+                {/* Comments Section */}
+                <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6">
+                  <h4 className="text-lg font-semibold text-white mb-4">Comments</h4>
+                  {commentsLoading ? (
+                    <div className="text-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+                    </div>
+                  ) : (
+                    <CommentList
+                      comments={comments}
+                      onCommentUpdate={handleCommentsUpdate}
+                      currentUserId={session?.user?.role === 'CLIENT' ? (session?.user?.clientId || '') : ''}
+                    />
+                  )}
+                </div>
               </div>
             ) : (
               <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-xl border border-gray-700 p-6">

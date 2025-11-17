@@ -34,6 +34,7 @@ interface PostCalendarProps {
   posts: Post[]
   userRole: 'AGENCY' | 'CLIENT' | 'ADMIN'
   clientTimezone?: string
+  clientId?: string
   onEditPost?: (post: Post) => void
   onViewPost?: (post: Post) => void
   onPostUpdate?: () => void
@@ -86,7 +87,7 @@ function convertToLocalTimezone(utcDateString: string, timezone?: string): Date 
   return new Date(year, month, day, localHours, minutes)
 }
 
-export default function PostCalendar({ posts, userRole, clientTimezone, onEditPost, onViewPost, onPostUpdate }: PostCalendarProps) {
+export default function PostCalendar({ posts, userRole, clientTimezone, clientId, onEditPost, onViewPost, onPostUpdate }: PostCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
@@ -620,7 +621,7 @@ export default function PostCalendar({ posts, userRole, clientTimezone, onEditPo
                                 <CommentList
                                   comments={postComments}
                                   onCommentUpdate={() => fetchComments(selectedPost.id)}
-                                  currentUserId={''}
+                                  currentUserId={userRole === 'CLIENT' ? (clientId || '') : ''}
                                 />
                               )}
                             </div>
