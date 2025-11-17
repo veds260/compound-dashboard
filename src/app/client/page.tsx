@@ -190,6 +190,10 @@ export default function ClientDashboard() {
       if (selectedPost?.id === postId) {
         setSelectedPost(updatedPost)
       }
+
+      // Refresh stats after status update
+      fetchStats()
+
       toast.success(`Post ${newStatus.toLowerCase()}`)
     } catch (error) {
       console.error('Error updating post:', error)
@@ -228,7 +232,8 @@ export default function ClientDashboard() {
     )
   }
 
-  const pendingCount = posts.filter(p => p.status === 'PENDING').length
+  // Use stats from API instead of recalculating
+  const pendingCount = stats.pendingApprovals
   const suggestChangesCount = posts.filter(p => p.status === 'SUGGEST_CHANGES').length
 
   const statCards = [
@@ -243,7 +248,7 @@ export default function ClientDashboard() {
     },
     {
       name: 'Pending Approvals',
-      value: pendingCount,
+      value: stats.pendingApprovals,
       description: 'Need your review',
       icon: HourglassIcon,
       iconColor: 'text-amber-200',
