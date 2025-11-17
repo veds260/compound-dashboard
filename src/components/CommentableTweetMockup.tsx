@@ -70,6 +70,8 @@ export default function CommentableTweetMockup({
     endOffset: number
     x: number
     y: number
+    relativeX: number
+    relativeY: number
   } | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -111,12 +113,19 @@ export default function CommentableTweetMockup({
       const endOffset = startOffset + selectedText.length
 
       if (startOffset !== -1) {
+        // Use viewport coordinates for fixed positioning
+        const viewportX = rect.left + rect.width / 2
+        const viewportY = rect.top - 10
+
         setSelection({
           text: selectedText,
           startOffset,
           endOffset,
-          x: rect.left - containerRect.left + rect.width / 2,
-          y: rect.top - containerRect.top - 10
+          x: viewportX,
+          y: viewportY,
+          // Also store relative coordinates for the button
+          relativeX: rect.left - containerRect.left + rect.width / 2,
+          relativeY: rect.top - containerRect.top - 10
         })
         setShowCommentButton(true)
         setShowCommentPopup(false)
@@ -412,8 +421,8 @@ export default function CommentableTweetMockup({
           onClick={handleOpenCommentPopup}
           className="absolute z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 shadow-lg transition-all hover:scale-110"
           style={{
-            left: `${selection.x}px`,
-            top: `${selection.y}px`,
+            left: `${selection.relativeX}px`,
+            top: `${selection.relativeY}px`,
             transform: 'translate(-50%, -100%)'
           }}
         >
@@ -424,11 +433,11 @@ export default function CommentableTweetMockup({
       {/* Comment Popup - Shows after clicking the button */}
       {showCommentPopup && selection && (
         <div
-          className="absolute z-50 bg-theme-card border border-theme-border rounded-lg shadow-xl p-4 w-80"
+          className="fixed z-[100] bg-theme-card border border-theme-border rounded-lg shadow-xl p-4 w-80"
           style={{
             left: `${selection.x}px`,
             top: `${selection.y}px`,
-            transform: 'translate(-50%, -100%)'
+            transform: 'translate(-50%, calc(-100% - 10px))'
           }}
         >
           <div className="flex items-start justify-between mb-3">
