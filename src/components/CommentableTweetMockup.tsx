@@ -115,37 +115,19 @@ export default function CommentableTweetMockup({
         const endOffset = startOffset + selectedText.length
 
         if (startOffset !== -1) {
-          // Use viewport coordinates for fixed positioning
-          const popupWidth = 320 // w-80 = 20rem = 320px
-          const popupHeight = 280 // Estimated height
-
-          let viewportX = rect.left + rect.width / 2
-          let viewportY = rect.top - 10
-
-          // Clamp X to keep popup within viewport
-          const minX = popupWidth / 2 + 10
-          const maxX = window.innerWidth - popupWidth / 2 - 10
-          viewportX = Math.max(minX, Math.min(maxX, viewportX))
-
-          // Ensure popup doesn't go above viewport
-          const minY = popupHeight + 20
-          let showBelow = false
-          if (viewportY < minY) {
-            // Position below selection instead
-            viewportY = rect.bottom + 10
-            showBelow = true
-          }
+          // Calculate relative coordinates for both button and popup
+          const relativeX = rect.left - containerRect.left + rect.width / 2
+          const relativeY = rect.top - containerRect.top - 10
 
           setSelection({
             text: selectedText,
             startOffset,
             endOffset,
-            x: viewportX,
-            y: viewportY,
-            // Also store relative coordinates for the button
-            relativeX: rect.left - containerRect.left + rect.width / 2,
-            relativeY: rect.top - containerRect.top - 10,
-            showBelow
+            x: relativeX,
+            y: relativeY,
+            relativeX,
+            relativeY,
+            showBelow: false
           })
           setShowCommentButton(true)
           setShowCommentPopup(false)
@@ -467,13 +449,13 @@ export default function CommentableTweetMockup({
       {/* Comment Popup - Shows after clicking the button */}
       {showCommentPopup && selection && (
         <div
-          className="fixed z-[100] bg-theme-card border border-theme-border rounded-lg shadow-xl p-4 w-80"
+          className="absolute z-[9999] bg-theme-card border border-theme-border rounded-lg shadow-2xl p-4 w-80"
           style={{
             left: `${selection.x}px`,
             top: `${selection.y}px`,
-            transform: selection.showBelow
-              ? 'translate(-50%, 0)'
-              : 'translate(-50%, calc(-100% - 10px))'
+            transform: 'translate(-50%, calc(-100% - 10px))',
+            maxHeight: '400px',
+            overflow: 'auto'
           }}
         >
           <div className="flex items-start justify-between mb-3">
