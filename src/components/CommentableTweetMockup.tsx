@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import TweetMockup from './TweetMockup'
 import { ChatBubbleLeftIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
@@ -115,16 +116,20 @@ export default function CommentableTweetMockup({
         const endOffset = startOffset + selectedText.length
 
         if (startOffset !== -1) {
-          // Calculate relative coordinates for both button and popup
+          // Calculate relative coordinates for button (absolute positioning within container)
           const relativeX = rect.left - containerRect.left + rect.width / 2
           const relativeY = rect.top - containerRect.top - 10
+
+          // Calculate viewport coordinates for popup (portal with fixed positioning)
+          const viewportX = rect.left + rect.width / 2
+          const viewportY = rect.top
 
           setSelection({
             text: selectedText,
             startOffset,
             endOffset,
-            x: relativeX,
-            y: relativeY,
+            x: viewportX,
+            y: viewportY,
             relativeX,
             relativeY,
             showBelow: false
@@ -446,10 +451,10 @@ export default function CommentableTweetMockup({
         </button>
       )}
 
-      {/* Comment Popup - Shows after clicking the button */}
-      {showCommentPopup && selection && (
+      {/* Comment Popup - Rendered via Portal to avoid modal clipping */}
+      {showCommentPopup && selection && typeof window !== 'undefined' && createPortal(
         <div
-          className="absolute z-[9999] bg-theme-card border border-theme-border rounded-lg shadow-2xl p-4 w-80"
+          className="fixed z-[9999] bg-theme-card border border-theme-border rounded-lg shadow-2xl p-4 w-80"
           style={{
             left: `${selection.x}px`,
             top: `${selection.y}px`,
@@ -511,7 +516,8 @@ export default function CommentableTweetMockup({
               Add Comment
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
