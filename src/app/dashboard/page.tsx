@@ -2,15 +2,18 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import useSWR from 'swr'
 import Layout from '@/components/Layout'
 import PremiumCard from '@/components/PremiumCard'
-import { 
-  UserGroupIcon, 
-  DocumentTextIcon, 
+import {
+  UserGroupIcon,
+  DocumentTextIcon,
   ChartBarIcon,
   CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
+
+const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 interface DashboardStats {
   totalClients: number
@@ -22,17 +25,16 @@ interface DashboardStats {
 export default function AgencyDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [stats, setStats] = useState<DashboardStats>({
-    totalClients: 0,
-    totalPosts: 0,
-    pendingApprovals: 0,
-    totalUploads: 0
-  })
-  const [loading, setLoading] = useState(true)
+
+  const { data: stats, isLoading } = useSWR<DashboardStats>(
+    session?.user?.role === 'AGENCY' ? '/api/dashboard/stats' : null,
+    fetcher,
+    { refreshInterval: 30000, revalidateOnFocus: true }
+  )
 
   useEffect(() => {
     if (status === 'loading') return
-    
+
     if (!session) {
       router.push('/login')
       return
@@ -42,33 +44,19 @@ export default function AgencyDashboard() {
       router.push('/client')
       return
     }
-    
+
     if (session.user.role === 'ADMIN') {
       router.push('/admin')
       return
     }
-    
+
     if (session.user.role !== 'AGENCY') {
       router.push('/login')
       return
     }
-
-    fetchStats()
   }, [session, status, router])
 
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/dashboard/stats')
-      const data = await response.json()
-      setStats(data)
-    } catch (error) {
-      console.error('Error fetching stats:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (status === 'loading' || !session || loading) {
+  if (status === 'loading' || !session || isLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-64">
@@ -81,28 +69,28 @@ export default function AgencyDashboard() {
   const statCards = [
     {
       name: 'Total Clients',
-      value: stats.totalClients,
+      value: stats?.totalClients || 0,
       icon: UserGroupIcon,
       color: 'bg-blue-500',
       href: '/dashboard/clients'
     },
     {
       name: 'Total Posts',
-      value: stats.totalPosts,
+      value: stats?.totalPosts || 0,
       icon: DocumentTextIcon,
       color: 'bg-green-500',
       href: '/dashboard/posts'
     },
     {
       name: 'Pending Approvals',
-      value: stats.pendingApprovals,
+      value: stats?.pendingApprovals || 0,
       icon: ChartBarIcon,
       color: 'bg-yellow-500',
       href: '/dashboard/posts'
     },
     {
       name: 'Data Uploads',
-      value: stats.totalUploads,
+      value: stats?.totalUploads || 0,
       icon: CloudArrowUpIcon,
       color: 'bg-purple-500',
       href: '/dashboard/upload'

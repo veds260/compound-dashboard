@@ -58,6 +58,8 @@ model Client {
   posts             Post[]
   uploads           Upload[]
 
+  @@index([agencyId])
+  @@index([active])
   @@map("Client")
 }
 
@@ -75,6 +77,9 @@ model Upload {
   uploadedBy   User        @relation("UploadedBy", fields: [uploadedById], references: [id])
   client       Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([clientId])
+  @@index([uploadedById])
+  @@index([uploadDate])
   @@map("Upload")
 }
 
@@ -132,6 +137,11 @@ model Post {
   comments      Comment[]
 
   @@unique([clientId, tweetId])
+  @@index([clientId])
+  @@index([status])
+  @@index([clientId, status])
+  @@index([scheduledDate])
+  @@index([createdAt])
   @@map("Post")
 }
 

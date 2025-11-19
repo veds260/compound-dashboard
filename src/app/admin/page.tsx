@@ -2,7 +2,8 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import useSWR from 'swr'
 import Layout from '@/components/Layout'
 import PremiumCard from '@/components/PremiumCard'
 import {
@@ -13,6 +14,8 @@ import {
   EyeIcon,
   CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
+
+const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 interface AdminStats {
   totalWriters: number
@@ -34,19 +37,24 @@ interface WriterOverview {
 export default function AdminDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [stats, setStats] = useState<AdminStats>({
-    totalWriters: 0,
-    totalClients: 0,
-    totalPosts: 0,
-    pendingApprovals: 0,
-    totalUploads: 0
-  })
-  const [writers, setWriters] = useState<WriterOverview[]>([])
-  const [loading, setLoading] = useState(true)
+
+  const { data: stats, isLoading: statsLoading } = useSWR<AdminStats>(
+    session?.user?.role === 'ADMIN' ? '/api/admin/stats' : null,
+    fetcher,
+    { refreshInterval: 30000, revalidateOnFocus: true }
+  )
+
+  const { data: writers, isLoading: writersLoading } = useSWR<WriterOverview[]>(
+    session?.user?.role === 'ADMIN' ? '/api/admin/writers' : null,
+    fetcher,
+    { refreshInterval: 30000, revalidateOnFocus: true }
+  )
+
+  const loading = statsLoading || writersLoading
 
   useEffect(() => {
     if (status === 'loading') return
-    
+
     if (!session) {
       router.push('/login')
       return
@@ -56,32 +64,7 @@ export default function AdminDashboard() {
       router.push('/dashboard')
       return
     }
-
-    fetchStats()
-    fetchWriters()
   }, [session, status, router])
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/admin/stats')
-      const data = await response.json()
-      setStats(data)
-    } catch (error) {
-      console.error('Error fetching admin stats:', error)
-    }
-  }
-
-  const fetchWriters = async () => {
-    try {
-      const response = await fetch('/api/admin/writers')
-      const data = await response.json()
-      setWriters(data)
-    } catch (error) {
-      console.error('Error fetching writers:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   if (status === 'loading' || !session || loading) {
     return (
@@ -96,25 +79,25 @@ export default function AdminDashboard() {
   const statCards = [
     {
       name: 'Total Writers',
-      value: stats.totalWriters,
+      value: stats?.totalWriters || 0,
       icon: BuildingOfficeIcon,
       color: 'bg-blue-500',
     },
     {
       name: 'Total Clients',
-      value: stats.totalClients,
+      value: stats?.totalClients || 0,
       icon: UserGroupIcon,
       color: 'bg-green-500',
     },
     {
       name: 'Total Posts',
-      value: stats.totalPosts,
+      value: stats?.totalPosts || 0,
       icon: DocumentTextIcon,
       color: 'bg-purple-500',
     },
     {
       name: 'Pending Approvals',
-      value: stats.pendingApprovals,
+      value: stats?.pendingApprovals || 0,
       icon: ChartBarIcon,
       color: 'bg-yellow-500',
     },
