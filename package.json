@@ -47,6 +47,7 @@
     "react-dropzone": "^14.2.3",
     "react-hot-toast": "^2.4.1",
     "recharts": "^2.8.0",
+    "swr": "^2.3.6",
     "tailwindcss": "^3.3.0",
     "typescript": "^5",
     "xlsx": "^0.18.5"

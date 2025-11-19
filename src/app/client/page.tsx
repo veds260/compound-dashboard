@@ -3,12 +3,16 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import useSWR from 'swr'
 import Layout from '@/components/Layout'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import PremiumCard from '@/components/PremiumCard'
 import { DocumentTextIcon, ChartBarIcon, ClockIcon, ArrowsPointingOutIcon, CheckCircleIcon, XCircleIcon, ArrowTopRightOnSquareIcon, CalendarIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+
+// Fetcher function for SWR
+const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 interface ClientStats {
   scheduledPosts: number
@@ -105,23 +109,31 @@ function convertToLocalTimezone(utcDateString: string, timezone?: string): Date 
 export default function ClientDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [stats, setStats] = useState<ClientStats>({
-    scheduledPosts: 0,
-    pendingApprovals: 0,
-    analyticsData: 0
-  })
-  const [posts, setPosts] = useState<Post[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('PENDING')
-  const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false)
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
   const [feedbackAction, setFeedbackAction] = useState<'SUGGEST_CHANGES' | 'REJECTED'>('SUGGEST_CHANGES')
   const [feedback, setFeedback] = useState('')
 
+  // Use SWR for caching with 30 second refresh
+  const { data: stats, mutate: mutateStats, isLoading: statsLoading } = useSWR<ClientStats>(
+    session?.user?.role === 'CLIENT' ? '/api/client/stats' : null,
+    fetcher,
+    { refreshInterval: 30000, revalidateOnFocus: true }
+  )
+
+  const { data: posts, mutate: mutatePosts, isLoading: postsLoading } = useSWR<Post[]>(
+    session?.user?.clientId ? `/api/posts?clientId=${session.user.clientId}` : null,
+    fetcher,
+    { refreshInterval: 30000, revalidateOnFocus: true }
+  )
+
+  const loading = statsLoading || postsLoading
+
   useEffect(() => {
     if (status === 'loading') return
-    
+
     if (!session) {
       router.push('/login')
       return
@@ -131,44 +143,17 @@ export default function ClientDashboard() {
       router.push('/dashboard')
       return
     }
-    
+
     if (session.user.role === 'ADMIN') {
       router.push('/admin')
       return
     }
-    
+
     if (session.user.role !== 'CLIENT') {
       router.push('/login')
       return
     }
-
-    fetchStats()
-    fetchPosts()
   }, [session, status, router])
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/client/stats')
-      const data = await response.json()
-      setStats(data)
-    } catch (error) {
-      console.error('Error fetching stats:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchPosts = async () => {
-    try {
-      const response = await fetch(`/api/posts?clientId=${session?.user?.clientId}`)
-      const data = await response.json()
-      if (Array.isArray(data)) {
-        setPosts(data) // Store all posts for filtering
-      }
-    } catch (error) {
-      console.error('Error fetching posts:', error)
-    }
-  }
 
   const handleStatusUpdate = async (postId: string, newStatus: string, feedback?: string) => {
     try {
@@ -186,13 +171,15 @@ export default function ClientDashboard() {
       }
 
       const updatedPost = await response.json()
-      setPosts(posts.map(p => p.id === postId ? updatedPost : p))
+
+      // Update local state
       if (selectedPost?.id === postId) {
         setSelectedPost(updatedPost)
       }
 
-      // Refresh stats after status update
-      fetchStats()
+      // Revalidate both stats and posts cache
+      mutateStats()
+      mutatePosts()
 
       toast.success(`Post ${newStatus.toLowerCase()}`)
     } catch (error) {
@@ -233,13 +220,13 @@ export default function ClientDashboard() {
   }
 
   // Use stats from API instead of recalculating
-  const pendingCount = stats.pendingApprovals
-  const suggestChangesCount = posts.filter(p => p.status === 'SUGGEST_CHANGES').length
+  const pendingCount = stats?.pendingApprovals || 0
+  const suggestChangesCount = posts?.filter(p => p.status === 'SUGGEST_CHANGES').length || 0
 
   const statCards = [
     {
       name: 'Scheduled Posts',
-      value: stats.scheduledPosts,
+      value: stats?.scheduledPosts || 0,
       description: 'Set for release',
       icon: DetailedCalendarIcon,
       iconColor: 'text-white',
@@ -248,7 +235,7 @@ export default function ClientDashboard() {
     },
     {
       name: 'Pending Approvals',
-      value: stats.pendingApprovals,
+      value: stats?.pendingApprovals || 0,
       description: 'Need your review',
       icon: HourglassIcon,
       iconColor: 'text-amber-200',
@@ -257,7 +244,7 @@ export default function ClientDashboard() {
     },
     {
       name: 'Approved Posts',
-      value: stats.analyticsData,
+      value: stats?.analyticsData || 0,
       description: 'Ready to publish',
       icon: CheckIcon,
       iconColor: 'text-white',
@@ -267,8 +254,8 @@ export default function ClientDashboard() {
   ]
 
   const filteredPosts = statusFilter === 'ALL'
-    ? posts.slice(0, 6)
-    : posts.filter(post => post.status === statusFilter).slice(0, 6)
+    ? (posts || []).slice(0, 6)
+    : (posts || []).filter(post => post.status === statusFilter).slice(0, 6)
 
   const getStatusBadge = (status: string) => {
     const styles = {
