@@ -186,7 +186,7 @@ export default function AdminDashboard() {
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">All agency writers and their client management</p>
           </div>
           <div className="overflow-hidden">
-            {writers.length === 0 ? (
+            {!writers || writers.length === 0 ? (
               <div className="px-6 py-8 text-center">
                 <p className="text-sm text-gray-500 dark:text-gray-400">No writers found in the system.</p>
               </div>
