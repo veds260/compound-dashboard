@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import TweetMockup from './TweetMockup'
 import { ChatBubbleLeftIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
@@ -61,6 +61,20 @@ export default function CommentableTweetMockup({
   const [commentText, setCommentText] = useState('')
   const [guestName, setGuestName] = useState('')
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set())
+
+  // Parse thread from tweetText if it contains triple line breaks
+  const parsedThreadTweets = useMemo(() => {
+    if (threadTweets && threadTweets.length > 0) {
+      return threadTweets
+    }
+    const lines = tweetText.split('\n\n\n').filter(line => line.trim().length > 0)
+    if (lines.length > 1) {
+      return lines
+    }
+    return [tweetText]
+  }, [tweetText, threadTweets])
+
+  const isActualThread = parsedThreadTweets.length > 1
 
   const handleImageError = (index: number) => {
     setImageErrors(prev => new Set(prev).add(index))
@@ -240,10 +254,21 @@ export default function CommentableTweetMockup({
     }
   }
 
-  // Render tweet text with comment highlights
-  const renderTweetWithHighlights = () => {
+  // Render tweet text with comment highlights for a specific tweet content
+  const renderTweetWithHighlights = (content: string, contentStartOffset: number = 0) => {
     if (comments.length === 0) {
-      return tweetText
+      return content
+    }
+
+    const contentEndOffset = contentStartOffset + content.length
+
+    // Filter comments that overlap with this content
+    const relevantComments = comments.filter(c =>
+      c.startOffset < contentEndOffset && c.endOffset > contentStartOffset
+    )
+
+    if (relevantComments.length === 0) {
+      return content
     }
 
     const segments: Array<{
@@ -253,48 +278,52 @@ export default function CommentableTweetMockup({
       endOffset: number
     }> = []
 
-    let currentIndex = 0
+    let currentIndex = contentStartOffset
 
     // Sort comments by startOffset
-    const sortedComments = [...comments].sort((a, b) => a.startOffset - b.startOffset)
+    const sortedComments = [...relevantComments].sort((a, b) => a.startOffset - b.startOffset)
 
     sortedComments.forEach(comment => {
+      // Clamp comment offsets to content bounds
+      const clampedStart = Math.max(comment.startOffset, contentStartOffset)
+      const clampedEnd = Math.min(comment.endOffset, contentEndOffset)
+
       // Add text before this comment
-      if (currentIndex < comment.startOffset) {
+      if (currentIndex < clampedStart) {
         segments.push({
-          text: tweetText.slice(currentIndex, comment.startOffset),
+          text: tweetText.slice(currentIndex, clampedStart),
           commentIds: [],
           startOffset: currentIndex,
-          endOffset: comment.startOffset
+          endOffset: clampedStart
         })
       }
 
       // Add the commented text
       const existingSegment = segments.find(
-        s => s.startOffset === comment.startOffset && s.endOffset === comment.endOffset
+        s => s.startOffset === clampedStart && s.endOffset === clampedEnd
       )
 
       if (existingSegment) {
         existingSegment.commentIds.push(comment.id)
       } else {
         segments.push({
-          text: tweetText.slice(comment.startOffset, comment.endOffset),
+          text: tweetText.slice(clampedStart, clampedEnd),
           commentIds: [comment.id],
-          startOffset: comment.startOffset,
-          endOffset: comment.endOffset
+          startOffset: clampedStart,
+          endOffset: clampedEnd
         })
       }
 
-      currentIndex = Math.max(currentIndex, comment.endOffset)
+      currentIndex = Math.max(currentIndex, clampedEnd)
     })
 
     // Add remaining text
-    if (currentIndex < tweetText.length) {
+    if (currentIndex < contentEndOffset) {
       segments.push({
-        text: tweetText.slice(currentIndex),
+        text: tweetText.slice(currentIndex, contentEndOffset),
         commentIds: [],
         startOffset: currentIndex,
-        endOffset: tweetText.length
+        endOffset: contentEndOffset
       })
     }
 
@@ -327,113 +356,162 @@ export default function CommentableTweetMockup({
     })
   }
 
+  // Calculate the start offset for each thread tweet in the original text
+  const getThreadTweetOffset = (tweetIndex: number): number => {
+    let offset = 0
+    for (let i = 0; i < tweetIndex; i++) {
+      offset += parsedThreadTweets[i].length + 3 // +3 for the \n\n\n separator
+    }
+    return offset
+  }
+
+  // Filter media for a specific tweet index
+  const getMediaForTweet = (tweetIndex: number) => {
+    if (!media) return []
+    return media.filter(item => {
+      const itemIndex = item.tweetIndex !== undefined ? item.tweetIndex : 0
+      return itemIndex === tweetIndex
+    })
+  }
+
+  // Render a single tweet card
+  const renderSingleTweetCard = (content: string, tweetIndex: number, total: number) => {
+    const tweetMedia = getMediaForTweet(tweetIndex)
+    const contentOffset = getThreadTweetOffset(tweetIndex)
+
+    return (
+      <div key={tweetIndex} className="bg-black border border-gray-800 rounded-2xl p-5 w-full mx-auto" style={{ maxWidth: '550px' }}>
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start space-x-3 flex-1 min-w-0">
+            {/* Profile Picture */}
+            <div className="flex-shrink-0">
+              {profilePicture ? (
+                <img
+                  src={profilePicture}
+                  alt={clientName}
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                  {clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                </div>
+              )}
+            </div>
+
+            {/* Name and Handle */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-1">
+                <span className="text-white font-bold hover:underline cursor-pointer text-[15px]">
+                  {clientName}
+                </span>
+                <svg className="w-5 h-5 text-blue-400 flex-shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"
+                  />
+                </svg>
+              </div>
+              <span className="text-gray-500 text-[15px]">
+                {twitterHandle?.startsWith('@') ? twitterHandle : twitterHandle ? `@${twitterHandle}` : '@user'}
+              </span>
+            </div>
+          </div>
+
+          {/* More Options */}
+          <button className="text-gray-500 hover:text-blue-400 p-2 hover:bg-blue-500/10 rounded-full transition-colors flex-shrink-0">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Thread Indicator */}
+        {total > 1 && (
+          <div className="inline-block px-2 py-0.5 bg-gray-800 text-gray-400 text-xs rounded mb-2">
+            {tweetIndex + 1}/{total}
+          </div>
+        )}
+
+        {/* Tweet Content with highlights */}
+        <div className="text-white text-[15px] leading-[1.4] whitespace-pre-wrap break-words mb-4">
+          {renderTweetWithHighlights(content, contentOffset)}
+        </div>
+
+        {/* Media Gallery for this tweet */}
+        {tweetMedia.length > 0 && (
+          <div className={`mb-4 rounded-2xl overflow-hidden border border-gray-800 ${
+            tweetMedia.length === 1 ? '' :
+            tweetMedia.length === 2 ? 'grid grid-cols-2 gap-0.5' :
+            tweetMedia.length === 3 ? 'grid grid-cols-2 grid-rows-2 gap-0.5' :
+            'grid grid-cols-2 gap-0.5'
+          }`}>
+            {tweetMedia.map((item, index) => (
+              <div
+                key={index}
+                className={`relative bg-gray-900 ${
+                  tweetMedia.length === 3 && index === 0 ? 'row-span-2' : ''
+                }`}
+                style={{
+                  paddingBottom: tweetMedia.length === 1 ? '56.25%' : '75%'
+                }}
+              >
+                {!imageErrors.has(index) ? (
+                  <img
+                    src={item.data}
+                    alt={item.name || `Media ${index + 1}`}
+                    className="absolute inset-0 w-full h-full object-contain"
+                    onError={() => handleImageError(index)}
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center text-center p-4">
+                    <svg className="w-12 h-12 text-red-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <p className="text-red-300 text-sm font-semibold">Image unavailable</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Timestamp - only on last tweet */}
+        {tweetIndex === total - 1 && (
+          <div className="text-gray-500 text-[15px] mb-4 pb-4 border-b border-gray-800">
+            {timestamp ? new Date(timestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' }) : new Date().toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' })} · <span className="text-white font-semibold">X</span> for iPhone
+          </div>
+        )}
+
+        {/* Help text - only on last tweet */}
+        {tweetIndex === total - 1 && (
+          <div className="text-xs text-gray-400 text-center py-2 border-t border-gray-800">
+            💡 Select any text above to add a comment
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="relative">
       <div
         ref={contentRef}
         onMouseUp={handleTextSelection}
-        className="relative select-text"
+        className="relative select-text space-y-4"
       >
-        {/* Full TweetMockup with highlighted text */}
-        <div className="bg-black border border-gray-800 rounded-2xl p-5 w-full mx-auto" style={{ maxWidth: '550px' }}>
-          {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-start space-x-3 flex-1 min-w-0">
-              {/* Profile Picture */}
-              <div className="flex-shrink-0">
-                {profilePicture ? (
-                  <img
-                    src={profilePicture}
-                    alt={clientName}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                    {clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                  </div>
-                )}
-              </div>
+        {parsedThreadTweets.map((tweet, index) =>
+          renderSingleTweetCard(tweet, index, parsedThreadTweets.length)
+        )}
 
-              {/* Name and Handle */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-1">
-                  <span className="text-white font-bold hover:underline cursor-pointer text-[15px]">
-                    {clientName}
-                  </span>
-                  <svg className="w-5 h-5 text-blue-400 flex-shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"
-                    />
-                  </svg>
-                </div>
-                <span className="text-gray-500 text-[15px]">
-                  {twitterHandle?.startsWith('@') ? twitterHandle : twitterHandle ? `@${twitterHandle}` : '@user'}
-                </span>
-              </div>
-            </div>
-
-            {/* More Options */}
-            <button className="text-gray-500 hover:text-blue-400 p-2 hover:bg-blue-500/10 rounded-full transition-colors flex-shrink-0">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-              </svg>
-            </button>
+        {/* Thread indicator */}
+        {isActualThread && (
+          <div className="text-center">
+            <span className="inline-block px-3 py-1 bg-blue-900/30 text-blue-300 text-xs rounded-full border border-blue-800">
+              Thread: {parsedThreadTweets.length} tweets
+            </span>
           </div>
-
-          {/* Tweet Content with highlights */}
-          <div className="text-white text-[15px] leading-[1.4] whitespace-pre-wrap break-words mb-4">
-            {renderTweetWithHighlights()}
-          </div>
-
-          {/* Media Gallery */}
-          {media && media.length > 0 && (
-            <div className={`mb-4 rounded-2xl overflow-hidden border border-gray-800 ${
-              media.length === 1 ? '' :
-              media.length === 2 ? 'grid grid-cols-2 gap-0.5' :
-              media.length === 3 ? 'grid grid-cols-2 grid-rows-2 gap-0.5' :
-              'grid grid-cols-2 gap-0.5'
-            }`}>
-              {media.map((item, index) => (
-                <div
-                  key={index}
-                  className={`relative bg-gray-900 ${
-                    media.length === 3 && index === 0 ? 'row-span-2' : ''
-                  }`}
-                  style={{
-                    paddingBottom: media.length === 1 ? '56.25%' : '75%'
-                  }}
-                >
-                  {!imageErrors.has(index) ? (
-                    <img
-                      src={item.data}
-                      alt={item.name || `Media ${index + 1}`}
-                      className="absolute inset-0 w-full h-full object-contain"
-                      onError={() => handleImageError(index)}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center text-center p-4">
-                      <svg className="w-12 h-12 text-red-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <p className="text-red-300 text-sm font-semibold">Image unavailable</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Timestamp */}
-          <div className="text-gray-500 text-[15px] mb-4 pb-4 border-b border-gray-800">
-            {timestamp ? new Date(timestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' }) : new Date().toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' })} · <span className="text-white font-semibold">X</span> for iPhone
-          </div>
-
-          {/* Help text */}
-          <div className="text-xs text-gray-400 text-center py-2 border-t border-gray-800">
-            💡 Select any text above to add a comment
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Comment Button - Shows first after text selection */}
