@@ -196,7 +196,7 @@ export default function TweetMockup({
           {tweetMedia.map((item, mediaIndex) => (
             <div
               key={mediaIndex}
-              className={`relative ${
+              className={`relative bg-gray-900 ${
                 tweetMedia.length === 3 && mediaIndex === 0 ? 'row-span-2' : ''
               }`}
               style={{
@@ -207,7 +207,7 @@ export default function TweetMockup({
                 <img
                   src={item.data}
                   alt={item.name || `Media ${mediaIndex + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full object-contain"
                   onError={() => handleImageError(mediaIndex)}
                 />
               ) : (

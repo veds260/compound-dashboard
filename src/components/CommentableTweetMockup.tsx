@@ -397,7 +397,7 @@ export default function CommentableTweetMockup({
               {media.map((item, index) => (
                 <div
                   key={index}
-                  className={`relative ${
+                  className={`relative bg-gray-900 ${
                     media.length === 3 && index === 0 ? 'row-span-2' : ''
                   }`}
                   style={{
@@ -408,7 +408,7 @@ export default function CommentableTweetMockup({
                     <img
                       src={item.data}
                       alt={item.name || `Media ${index + 1}`}
-                      className="absolute inset-0 w-full h-full object-cover"
+                      className="absolute inset-0 w-full h-full object-contain"
                       onError={() => handleImageError(index)}
                     />
                   ) : (
