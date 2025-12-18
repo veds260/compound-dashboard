@@ -38,25 +38,26 @@ model User {
 }
 
 model Client {
-  id                String              @id @default(cuid())
-  name              String
-  email             String              @unique
-  twitterHandle     String?
-  profilePicture    String?
-  timezone          String?
-  active            Boolean             @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  agencyId          String?
-  userId            String?             @unique
-  analytics         Analytics[]
-  tweetAnalytics    TweetAnalytics[]
-  followerAnalytics FollowerAnalytics[]
-  contentDumps      ContentDump[]
-  user              User?               @relation("ClientUser", fields: [userId], references: [id])
-  agency            User?               @relation("AgencyClients", fields: [agencyId], references: [id], onDelete: Cascade)
-  posts             Post[]
-  uploads           Upload[]
+  id                  String              @id @default(cuid())
+  name                String
+  email               String              @unique
+  twitterHandle       String?
+  profilePicture      String?
+  timezone            String?
+  active              Boolean             @default(true)
+  calendarShareToken  String?             @unique
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  agencyId            String?
+  userId              String?             @unique
+  analytics           Analytics[]
+  tweetAnalytics      TweetAnalytics[]
+  followerAnalytics   FollowerAnalytics[]
+  contentDumps        ContentDump[]
+  user                User?               @relation("ClientUser", fields: [userId], references: [id])
+  agency              User?               @relation("AgencyClients", fields: [agencyId], references: [id], onDelete: Cascade)
+  posts               Post[]
+  uploads             Upload[]
 
   @@index([agencyId])
   @@index([active])

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { PlusIcon, PencilIcon, TrashIcon, UserIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, UserIcon, CalendarDaysIcon, LinkIcon, ClipboardIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 
 interface Client {
@@ -12,6 +12,7 @@ interface Client {
   twitterHandle?: string
   createdAt: string
   userId?: string | null
+  calendarShareToken?: string | null
   user?: {
     id: string
     name: string
@@ -46,6 +47,10 @@ export default function ClientManagement() {
     password: ''
   })
   const [fixingLinks, setFixingLinks] = useState(false)
+  const [calendarShareModalOpen, setCalendarShareModalOpen] = useState(false)
+  const [calendarShareClient, setCalendarShareClient] = useState<Client | null>(null)
+  const [calendarShareUrl, setCalendarShareUrl] = useState<string | null>(null)
+  const [generatingShareLink, setGeneratingShareLink] = useState(false)
   const isAdmin = session?.user?.role === 'ADMIN'
 
   useEffect(() => {
@@ -187,13 +192,110 @@ export default function ClientManagement() {
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingClient(null)
-    setFormData({ 
-      name: '', 
-      email: '', 
+    setFormData({
+      name: '',
+      email: '',
       twitterHandle: '',
       createUserAccount: true,
       password: ''
     })
+  }
+
+  const openCalendarShareModal = async (client: Client) => {
+    setCalendarShareClient(client)
+    setCalendarShareModalOpen(true)
+
+    if (client.calendarShareToken) {
+      const baseUrl = window.location.origin
+      setCalendarShareUrl(`${baseUrl}/calendar/share/${client.calendarShareToken}`)
+    } else {
+      setCalendarShareUrl(null)
+    }
+  }
+
+  const generateCalendarShareLink = async () => {
+    if (!calendarShareClient) return
+
+    setGeneratingShareLink(true)
+    try {
+      const response = await fetch(`/api/clients/${calendarShareClient.id}/calendar-share`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate share link')
+      }
+
+      const data = await response.json()
+      setCalendarShareUrl(data.shareUrl)
+
+      // Update the client in the list
+      setClients(clients.map(c =>
+        c.id === calendarShareClient.id
+          ? { ...c, calendarShareToken: data.calendarShareToken }
+          : c
+      ))
+      setCalendarShareClient({ ...calendarShareClient, calendarShareToken: data.calendarShareToken })
+
+      toast.success('Calendar share link generated!')
+    } catch (error) {
+      console.error('Error generating calendar share link:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to generate share link')
+    } finally {
+      setGeneratingShareLink(false)
+    }
+  }
+
+  const revokeCalendarShareLink = async () => {
+    if (!calendarShareClient) return
+
+    if (!confirm('Are you sure you want to revoke this calendar share link? Anyone with the link will no longer be able to access it.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/clients/${calendarShareClient.id}/calendar-share`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to revoke share link')
+      }
+
+      setCalendarShareUrl(null)
+
+      // Update the client in the list
+      setClients(clients.map(c =>
+        c.id === calendarShareClient.id
+          ? { ...c, calendarShareToken: null }
+          : c
+      ))
+      setCalendarShareClient({ ...calendarShareClient, calendarShareToken: null })
+
+      toast.success('Calendar share link revoked')
+    } catch (error) {
+      console.error('Error revoking calendar share link:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to revoke share link')
+    }
+  }
+
+  const copyToClipboard = async () => {
+    if (!calendarShareUrl) return
+
+    try {
+      await navigator.clipboard.writeText(calendarShareUrl)
+      toast.success('Link copied to clipboard!')
+    } catch (error) {
+      toast.error('Failed to copy link')
+    }
+  }
+
+  const closeCalendarShareModal = () => {
+    setCalendarShareModalOpen(false)
+    setCalendarShareClient(null)
+    setCalendarShareUrl(null)
   }
 
   if (loading) {
@@ -297,22 +399,33 @@ export default function ClientManagement() {
                     {new Date(client.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    {isAdmin && (
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => openModal(client)}
-                          className="text-primary-600 hover:text-primary-900"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(client.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => openCalendarShareModal(client)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Share Calendar"
+                      >
+                        <CalendarDaysIcon className="h-5 w-5" />
+                      </button>
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => openModal(client)}
+                            className="text-primary-600 hover:text-primary-900"
+                            title="Edit Client"
+                          >
+                            <PencilIcon className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(client.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Client"
+                          >
+                            <TrashIcon className="h-5 w-5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -435,6 +548,97 @@ export default function ClientManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar Share Modal */}
+      {calendarShareModalOpen && calendarShareClient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-xl p-6 w-full max-w-lg shadow-large border border-gray-200/50 dark:border-gray-700/50">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <CalendarDaysIcon className="h-6 w-6 text-blue-500" />
+                Share Calendar
+              </h3>
+              <button
+                onClick={closeCalendarShareModal}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Share {calendarShareClient.name}'s content calendar with a public link. Anyone with this link can view the scheduled posts.
+            </p>
+
+            {calendarShareUrl ? (
+              <div className="space-y-4">
+                <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Share Link
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={calendarShareUrl}
+                      className="flex-1 text-sm bg-transparent border-none focus:ring-0 text-gray-900 dark:text-gray-100 p-0"
+                    />
+                    <button
+                      onClick={copyToClipboard}
+                      className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                      title="Copy to clipboard"
+                    >
+                      <ClipboardIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={revokeCalendarShareLink}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                  >
+                    Revoke Link
+                  </button>
+                  <a
+                    href={calendarShareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                    Open Calendar
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <CalendarDaysIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  No share link exists yet. Generate one to share this calendar.
+                </p>
+                <button
+                  onClick={generateCalendarShareLink}
+                  disabled={generatingShareLink}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {generatingShareLink ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <LinkIcon className="h-4 w-4" />
+                      Generate Share Link
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
