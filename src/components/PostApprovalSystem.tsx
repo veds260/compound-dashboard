@@ -25,6 +25,7 @@ import DateTimePicker from './DateTimePicker'
 import TweetMockup from './TweetMockup'
 import CommentableTweetMockup from './CommentableTweetMockup'
 import CommentList from './CommentList'
+import { PostListSkeleton } from './Skeleton'
 // import PostCalendar from './PostCalendar'
 // import ContentDump from './ContentDump'
 
@@ -913,8 +914,35 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-theme-accent"></div>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-white">Content Review</h2>
+          </div>
+        </div>
+
+        {/* Skeleton Filter Tabs */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center space-x-2 pb-2">
+            {['All', 'Pending', 'Approved', 'Suggest Changes', 'Rejected', 'Published'].map((label) => (
+              <div
+                key={label}
+                className="px-4 py-2 rounded-lg bg-theme-card border border-theme-border text-gray-600 text-sm"
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-400">Sort by:</span>
+            <div className="px-3 py-2 rounded-md bg-theme-card border border-theme-border text-gray-400 text-sm">
+              Newest First
+            </div>
+          </div>
+        </div>
+
+        {/* Skeleton Posts List */}
+        <PostListSkeleton count={5} />
       </div>
     )
   }

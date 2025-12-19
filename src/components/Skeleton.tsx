@@ -93,3 +93,48 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
     </div>
   )
 }
+
+export function PostListItemSkeleton() {
+  return (
+    <div className="p-6 border-b border-theme-border">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-3 mb-3">
+            <Skeleton className="h-6 w-24 rounded-full" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="mb-4">
+            <div className="p-4 bg-theme-bg rounded-lg border border-theme-border">
+              <Skeleton className="h-4 w-full mb-2" />
+              <Skeleton className="h-4 w-3/4 mb-2" />
+              <Skeleton className="h-4 w-1/2 mb-3" />
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+          <Skeleton className="h-4 w-48 mb-3" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <div className="flex flex-col space-y-2 ml-4 min-w-[140px]">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function PostListSkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <div className="bg-theme-card backdrop-blur-sm shadow-soft rounded-xl border border-theme-border overflow-hidden">
+      <div className="divide-y divide-theme-border">
+        {Array.from({ length: count }).map((_, i) => (
+          <PostListItemSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
