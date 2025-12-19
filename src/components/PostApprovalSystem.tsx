@@ -164,16 +164,23 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
         ? `/api/posts?clientId=${selectedClient}`
         : '/api/posts'
 
+      console.log('[fetchPosts] Fetching from:', url)
       const response = await fetch(url)
-      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to load posts')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to load posts`)
       }
 
+      const data = await response.json()
+      console.log('[fetchPosts] Response type:', typeof data, Array.isArray(data) ? 'array' : 'object')
+
       // Handle both new paginated format { posts, pagination } and old array format
-    setPosts(data.posts || (Array.isArray(data) ? data : []))
+      const postsArray = data?.posts ?? (Array.isArray(data) ? data : [])
+      console.log('[fetchPosts] Posts count:', postsArray.length)
+      setPosts(postsArray)
     } catch (error) {
+      console.error('[fetchPosts] Error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to load posts')
       setPosts([])
     } finally {

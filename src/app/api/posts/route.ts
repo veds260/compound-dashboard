@@ -115,6 +115,10 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(totalCount / limit),
         hasMore: skip + posts.length < totalCount
       }
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      }
     })
   } catch (error) {
     console.error('Error fetching posts:', error)
