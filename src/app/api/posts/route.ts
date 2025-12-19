@@ -6,15 +6,24 @@ import { prisma } from '@/lib/db'
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
+    const status = searchParams.get('status')
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const skip = (page - 1) * limit
 
     let whereClause: any = {}
+
+    // Add status filter if provided
+    if (status && status !== 'ALL') {
+      whereClause.status = status
+    }
 
     if (session.user.role === 'ADMIN') {
       // Admins can see all posts
@@ -61,26 +70,52 @@ export async function GET(request: NextRequest) {
       whereClause.clientId = session.user.clientId
     }
 
-    const posts = await prisma.post.findMany({
-      where: whereClause,
-      include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            timezone: true,
-            profilePicture: true,
-            twitterHandle: true
+    // Run count and findMany in parallel for better performance
+    const [posts, totalCount] = await Promise.all([
+      prisma.post.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          content: true,
+          tweetText: true,
+          scheduledDate: true,
+          typefullyUrl: true,
+          status: true,
+          feedback: true,
+          media: true,
+          createdAt: true,
+          publishedDate: true,
+          client: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              timezone: true,
+              profilePicture: true,
+              twitterHandle: true
+            }
           }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip,
+        take: limit
+      }),
+      prisma.post.count({ where: whereClause })
+    ])
+
+    // Return with pagination metadata
+    return NextResponse.json({
+      posts,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        hasMore: skip + posts.length < totalCount
       }
     })
-
-    return NextResponse.json(posts)
   } catch (error) {
     console.error('Error fetching posts:', error)
     return NextResponse.json(

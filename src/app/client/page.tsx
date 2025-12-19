@@ -7,6 +7,7 @@ import useSWR from 'swr'
 import Layout from '@/components/Layout'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import PremiumCard from '@/components/PremiumCard'
+import { StatCardsSkeletonGrid, PostCardSkeletonGrid } from '@/components/Skeleton'
 import { DocumentTextIcon, ChartBarIcon, ClockIcon, ArrowsPointingOutIcon, CheckCircleIcon, XCircleIcon, ArrowTopRightOnSquareIcon, CalendarIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -116,20 +117,24 @@ export default function ClientDashboard() {
   const [feedbackAction, setFeedbackAction] = useState<'SUGGEST_CHANGES' | 'REJECTED'>('SUGGEST_CHANGES')
   const [feedback, setFeedback] = useState('')
 
-  // Use SWR for caching with 30 second refresh
+  // Use SWR for caching with 30 second refresh - keepPreviousData prevents flash
   const { data: stats, mutate: mutateStats, isLoading: statsLoading } = useSWR<ClientStats>(
     session?.user?.role === 'CLIENT' ? '/api/client/stats' : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true }
+    { refreshInterval: 30000, revalidateOnFocus: true, keepPreviousData: true }
   )
 
-  const { data: posts, mutate: mutatePosts, isLoading: postsLoading } = useSWR<Post[]>(
-    session?.user?.clientId ? `/api/posts?clientId=${session.user.clientId}` : null,
+  const { data: postsData, mutate: mutatePosts, isLoading: postsLoading } = useSWR<{ posts: Post[], pagination: any }>(
+    session?.user?.clientId ? `/api/posts?clientId=${session.user.clientId}&limit=50` : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true }
+    { refreshInterval: 30000, revalidateOnFocus: true, keepPreviousData: true }
   )
 
-  const loading = statsLoading || postsLoading
+  // Extract posts from response
+  const posts = postsData?.posts || []
+
+  // Only block on initial session loading, not data loading
+  const initialLoading = status === 'loading'
 
   useEffect(() => {
     if (status === 'loading') return
@@ -209,7 +214,8 @@ export default function ClientDashboard() {
     setIsPostModalOpen(true)
   }
 
-  if (status === 'loading' || !session || loading) {
+  // Only show full-page loading for initial session check
+  if (initialLoading || !session) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-64">
@@ -308,38 +314,42 @@ export default function ClientDashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {statCards.map((card) => (
-            <PremiumCard
-              key={card.name}
-              hover
-              gradient
-              className="p-8 cursor-pointer animate-slide-up bg-theme-card border-theme-border"
-              onClick={() => {
-                if (card.name === 'Pending Approvals') {
-                  router.push('/client/posts?filter=PENDING')
-                } else if (card.name === 'Approved Posts') {
-                  router.push('/client/posts?filter=APPROVED')
-                } else if (card.name === 'Scheduled Posts') {
-                  router.push('/client/calendar')
-                }
-              }}
-            >
-              <div className="space-y-4">
-                <div className={`${card.color} rounded-xl p-4 w-fit shadow-lg`}>
-                  <card.icon className={`w-7 h-7 ${card.iconColor}`} strokeWidth={card.name === 'Approved Posts' ? 3 : 2} />
+        {statsLoading && !stats ? (
+          <StatCardsSkeletonGrid />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {statCards.map((card) => (
+              <PremiumCard
+                key={card.name}
+                hover
+                gradient
+                className="p-8 cursor-pointer animate-slide-up bg-theme-card border-theme-border"
+                onClick={() => {
+                  if (card.name === 'Pending Approvals') {
+                    router.push('/client/posts?filter=PENDING')
+                  } else if (card.name === 'Approved Posts') {
+                    router.push('/client/posts?filter=APPROVED')
+                  } else if (card.name === 'Scheduled Posts') {
+                    router.push('/client/calendar')
+                  }
+                }}
+              >
+                <div className="space-y-4">
+                  <div className={`${card.color} rounded-xl p-4 w-fit shadow-lg`}>
+                    <card.icon className={`w-7 h-7 ${card.iconColor}`} strokeWidth={card.name === 'Approved Posts' ? 3 : 2} />
+                  </div>
+                  <div>
+                    <p className="text-xl font-semibold text-white">{card.name}</p>
+                    <p className="text-sm text-gray-400 mt-1">{card.description}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xl font-semibold text-white">{card.name}</p>
-                  <p className="text-sm text-gray-400 mt-1">{card.description}</p>
+                <div className="mt-6">
+                  <p className="text-5xl font-bold text-white">{card.value}</p>
                 </div>
-              </div>
-              <div className="mt-6">
-                <p className="text-5xl font-bold text-white">{card.value}</p>
-              </div>
-            </PremiumCard>
-          ))}
-        </div>
+              </PremiumCard>
+            ))}
+          </div>
+        )}
 
         {/* Content Review Section */}
         <div id="content-review">
@@ -430,7 +440,9 @@ export default function ClientDashboard() {
 
           {/* Post Cards Grid */}
           <div className="px-6 py-5">
-            {filteredPosts.length > 0 ? (
+            {postsLoading && !postsData ? (
+              <PostCardSkeletonGrid count={6} />
+            ) : filteredPosts.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredPosts.map((post) => (
                   <div
