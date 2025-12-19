@@ -81,7 +81,8 @@ export default function PostsPage() {
         throw new Error(data.error || 'Failed to load posts')
       }
 
-      setPosts(Array.isArray(data) ? data : [])
+      // Handle both new paginated format { posts, pagination } and old array format
+      setPosts(data.posts || (Array.isArray(data) ? data : []))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load posts')
       setPosts([])

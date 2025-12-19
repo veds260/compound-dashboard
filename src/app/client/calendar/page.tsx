@@ -61,7 +61,8 @@ export default function ClientCalendarPage() {
         throw new Error(postsData.error || 'Failed to load posts')
       }
 
-      setPosts(Array.isArray(postsData) ? postsData : [])
+      // Handle both new paginated format { posts, pagination } and old array format
+      setPosts(postsData.posts || (Array.isArray(postsData) ? postsData : []))
       if (clientData && clientData.timezone) {
         setClientTimezone(clientData.timezone)
       }
@@ -83,7 +84,8 @@ export default function ClientCalendarPage() {
         throw new Error(data.error || 'Failed to load posts')
       }
 
-      setPosts(Array.isArray(data) ? data : [])
+      // Handle both new paginated format { posts, pagination } and old array format
+      setPosts(data.posts || (Array.isArray(data) ? data : []))
     } catch (error) {
       console.error('Error fetching posts:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to load posts')
