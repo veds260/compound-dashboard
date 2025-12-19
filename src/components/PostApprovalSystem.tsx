@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { format } from 'date-fns'
+import useSWR from 'swr'
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -26,6 +27,17 @@ import TweetMockup from './TweetMockup'
 import CommentableTweetMockup from './CommentableTweetMockup'
 import CommentList from './CommentList'
 import { PostListSkeleton } from './Skeleton'
+
+// SWR fetcher function
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to fetch')
+  }
+  const data = await response.json()
+  return data?.posts ?? (Array.isArray(data) ? data : [])
+}
 // import PostCalendar from './PostCalendar'
 // import ContentDump from './ContentDump'
 
@@ -86,8 +98,28 @@ function parseTimezoneOffset(timezone: string | undefined): number {
 }
 
 export default function PostApprovalSystem({ userRole, clientId, isAdmin, initialStatusFilter, onClientChange }: PostApprovalSystemProps) {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
+  const [selectedClient, setSelectedClient] = useState<string>(clientId || '')
+
+  // Build the API URL based on user role and selected client
+  const postsUrl = useMemo(() => {
+    if (userRole === 'CLIENT') {
+      return clientId ? `/api/posts?clientId=${clientId}` : null
+    }
+    return selectedClient ? `/api/posts?clientId=${selectedClient}` : '/api/posts'
+  }, [userRole, clientId, selectedClient])
+
+  // Use SWR for data fetching with caching
+  const { data: posts = [], isLoading: loading, mutate: mutatePosts } = useSWR<Post[]>(
+    postsUrl,
+    fetcher,
+    {
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      keepPreviousData: true, // Show old data while fetching new
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+    }
+  )
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -115,7 +147,6 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [uploadingMedia, setUploadingMedia] = useState(false)
   const [postMedia, setPostMedia] = useState<any[]>([])
   const [selectedTweetIndex, setSelectedTweetIndex] = useState<number>(0) // For thread media upload
-  const [selectedClient, setSelectedClient] = useState<string>(clientId || '')
   const [clients, setClients] = useState<{id: string, name: string, timezone?: string}[]>([])
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL')
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
@@ -140,12 +171,12 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     typefullyUrl: ''
   })
 
+  // Fetch clients list for AGENCY/ADMIN users
   useEffect(() => {
     if ((userRole === 'AGENCY' || isAdmin) && !clientId) {
       fetchClients()
     }
-    fetchPosts()
-  }, [userRole, clientId, selectedClient, isAdmin])
+  }, [userRole, clientId, isAdmin])
 
   const fetchClients = async () => {
     try {
@@ -154,38 +185,6 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       setClients(data.map((c: any) => ({ id: c.id, name: c.name, timezone: c.timezone })))
     } catch (error) {
       console.error('Error fetching clients:', error)
-    }
-  }
-
-  const fetchPosts = async () => {
-    try {
-      const url = userRole === 'CLIENT'
-        ? `/api/posts?clientId=${clientId}`
-        : selectedClient
-        ? `/api/posts?clientId=${selectedClient}`
-        : '/api/posts'
-
-      console.log('[fetchPosts] Fetching from:', url)
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `HTTP ${response.status}: Failed to load posts`)
-      }
-
-      const data = await response.json()
-      console.log('[fetchPosts] Response type:', typeof data, Array.isArray(data) ? 'array' : 'object')
-
-      // Handle both new paginated format { posts, pagination } and old array format
-      const postsArray = data?.posts ?? (Array.isArray(data) ? data : [])
-      console.log('[fetchPosts] Posts count:', postsArray.length)
-      setPosts(postsArray)
-    } catch (error) {
-      console.error('[fetchPosts] Error:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load posts')
-      setPosts([])
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -243,7 +242,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
       const updatedPost = await response.json()
       setMockupPost(updatedPost)
-      setPosts(posts.map(p => p.id === updatedPost.id ? updatedPost : p))
+      mutatePosts()
       setIsEditingTweet(false)
       toast.success('Tweet updated successfully')
     } catch (error) {
@@ -293,7 +292,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       // Update the post in the list
-      await fetchPosts()
+      mutatePosts()
     } catch (error: any) {
       console.error('Error uploading media:', error)
       toast.error(error.message || 'Failed to upload media')
@@ -319,7 +318,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       toast.success('Media removed')
 
       // Update the post in the list
-      await fetchPosts()
+      mutatePosts()
     } catch (error) {
       console.error('Error deleting media:', error)
       toast.error('Failed to delete media')
@@ -364,7 +363,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
         newStatus: updatedPost.status
       })
 
-      setPosts(posts.map(p => p.id === postId ? updatedPost : p))
+      mutatePosts()
 
       // Map status to user-friendly messages
       const statusMessages: { [key: string]: string } = {
@@ -456,7 +455,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const createdPost = await response.json()
-      setPosts([createdPost, ...posts])
+      mutatePosts()
       setIsModalOpen(false)
       setNewPost({ content: '', tweetText: '', scheduledDate: null, typefullyUrl: '', clientId: clientId || '' })
       toast.success('Post created successfully')
@@ -541,7 +540,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const updatedPost = await response.json()
-      setPosts(posts.map(p => p.id === updatedPost.id ? updatedPost : p))
+      mutatePosts()
       setIsEditModalOpen(false)
       setEditingPost(null)
       toast.success('Post updated successfully')
@@ -568,7 +567,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       // Remove post from state
-      setPosts(posts.filter(p => p.id !== postId))
+      mutatePosts()
       toast.success('Post deleted successfully')
     } catch (error) {
       console.error('Error deleting post:', error)
@@ -605,7 +604,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const result = await response.json()
-      setPosts(posts.map(p => p.id === postId ? result.post : p))
+      mutatePosts()
       toast.success('Post marked as updated and sent back for review')
     } catch (error) {
       console.error('Error marking post as updated:', error)
@@ -633,7 +632,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const result = await response.json()
-      setPosts(posts.map(p => p.id === publishingPost.id ? result.post : p))
+      mutatePosts()
       setIsPublishModalOpen(false)
       setPublishingPost(null)
       setTweetUrl('')
@@ -664,7 +663,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const result = await response.json()
-      setPosts(posts.map(p => p.id === notingPost.id ? result.post : p))
+      mutatePosts()
       setIsNoteModalOpen(false)
       setNotingPost(null)
       setWriterNote('')
@@ -698,7 +697,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const updatedPost = await response.json()
-      setPosts(posts.map(p => p.id === editStatusPost.id ? updatedPost : p))
+      mutatePosts()
       setIsEditStatusModalOpen(false)
       setEditStatusPost(null)
       setSelectedStatus('PENDING')
@@ -836,7 +835,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
 
       // Add all successfully created posts to the list
       if (createdPosts.length > 0) {
-        setPosts([...createdPosts, ...posts])
+        mutatePosts()
       }
 
       // Close modal and reset
@@ -851,7 +850,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
         toast.success(`Created ${successCount} posts (${errorCount} failed)`)
       }
 
-      fetchPosts()
+      mutatePosts()
     } catch (error) {
       console.error('Error in bulk submission:', error)
       toast.error('Failed to create posts')
