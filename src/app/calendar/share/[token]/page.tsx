@@ -3,9 +3,9 @@
 import { useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns'
-import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon, ChatBubbleLeftIcon, ArrowTopRightOnSquareIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline'
+import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
-import TweetMockup from '@/components/TweetMockup'
+import CommentableTweetMockup from '@/components/CommentableTweetMockup'
 import toast, { Toaster } from 'react-hot-toast'
 
 interface Client {
@@ -114,46 +114,11 @@ export default function SharedCalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [postMedia, setPostMedia] = useState<any[]>([])
-  const [newComment, setNewComment] = useState('')
-  const [submittingComment, setSubmittingComment] = useState(false)
 
-  // Submit a comment
-  const handleSubmitComment = async () => {
-    if (!selectedPost || !newComment.trim()) return
-
-    setSubmittingComment(true)
-    try {
-      const response = await fetch(`/api/calendar/${token}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          postId: selectedPost.id,
-          commentText: newComment.trim(),
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to submit comment')
-      }
-
-      // Refresh the data to show the new comment
-      await mutate()
-
-      // Update the selected post with new comments
-      const updatedData = await fetcher(`/api/calendar/${token}`)
-      const updatedPost = updatedData.posts.find((p: Post) => p.id === selectedPost.id)
-      if (updatedPost) {
-        setSelectedPost(updatedPost)
-      }
-
-      setNewComment('')
-      toast.success('Comment added successfully!')
-    } catch (err) {
-      console.error('Error submitting comment:', err)
-      toast.error('Failed to submit comment')
-    } finally {
-      setSubmittingComment(false)
-    }
+  // Callback when a comment is added
+  const handleCommentAdded = () => {
+    // Refresh the calendar data to sync comments
+    mutate()
   }
 
   // Get posts grouped by date
@@ -450,15 +415,19 @@ export default function SharedCalendarPage() {
             </div>
 
             <div className="p-6">
+              {/* Tweet Mockup with Commenting - Select text to add comments */}
               {selectedPost.tweetText && selectedPost.tweetText.trim() !== '' ? (
                 <div className="flex justify-center">
-                  <TweetMockup
+                  <CommentableTweetMockup
+                    postId={selectedPost.id}
                     clientName={selectedPost.client.name}
                     twitterHandle={selectedPost.client.twitterHandle || undefined}
                     profilePicture={selectedPost.client.profilePicture || undefined}
                     tweetText={selectedPost.tweetText}
                     timestamp={selectedPost.scheduledDate ? new Date(selectedPost.scheduledDate) : undefined}
                     media={postMedia}
+                    calendarToken={token}
+                    onCommentAdded={handleCommentAdded}
                   />
                 </div>
               ) : (
@@ -512,68 +481,6 @@ export default function SharedCalendarPage() {
                     </a>
                   </div>
                 )}
-              </div>
-
-              {/* Comments Section */}
-              <div className="mt-8 border-t border-gray-700 pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <ChatBubbleLeftIcon className="h-5 w-5 text-gray-400" />
-                  <h4 className="text-base font-medium text-white">
-                    Comments ({selectedPost.comments?.length || 0})
-                  </h4>
-                </div>
-
-                {/* Existing Comments */}
-                {selectedPost.comments && selectedPost.comments.length > 0 ? (
-                  <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                    {selectedPost.comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="bg-gray-900/50 rounded-lg p-3 border border-gray-700"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-blue-400">
-                            {comment.userName}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {format(new Date(comment.createdAt), 'MMM d, h:mm a')}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-300">{comment.commentText}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 mb-4">No comments yet. Be the first to leave feedback!</p>
-                )}
-
-                {/* Add Comment Form */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        handleSubmitComment()
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={handleSubmitComment}
-                    disabled={!newComment.trim() || submittingComment}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                  >
-                    {submittingComment ? (
-                      <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <PaperAirplaneIcon className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
               </div>
             </div>
           </div>

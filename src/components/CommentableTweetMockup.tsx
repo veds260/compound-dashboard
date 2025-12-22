@@ -37,6 +37,7 @@ interface CommentableTweetMockupProps {
   timestamp?: Date
   onCommentAdded?: () => void
   shareToken?: string
+  calendarToken?: string // Token for calendar share links
   media?: MediaItem[]
   isThread?: boolean
   threadTweets?: string[]
@@ -51,6 +52,7 @@ export default function CommentableTweetMockup({
   timestamp,
   onCommentAdded,
   shareToken,
+  calendarToken,
   media,
   isThread = false,
   threadTweets = []
@@ -99,9 +101,14 @@ export default function CommentableTweetMockup({
 
   const fetchComments = async () => {
     try {
-      const url = shareToken
-        ? `/api/share/${shareToken}/comments`
-        : `/api/posts/${postId}/comments`
+      let url: string
+      if (calendarToken) {
+        url = `/api/calendar/${calendarToken}/posts/${postId}/comments`
+      } else if (shareToken) {
+        url = `/api/share/${shareToken}/comments`
+      } else {
+        url = `/api/posts/${postId}/comments`
+      }
       const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
@@ -182,16 +189,21 @@ export default function CommentableTweetMockup({
       return
     }
 
-    // If it's a share token and no guest name is provided, show error
-    if (shareToken && !guestName.trim()) {
+    // If it's a share token or calendar token and no guest name is provided, show error
+    if ((shareToken || calendarToken) && !guestName.trim()) {
       toast.error('Please enter your name')
       return
     }
 
     try {
-      const url = shareToken
-        ? `/api/share/${shareToken}/comments`
-        : `/api/posts/${postId}/comments`
+      let url: string
+      if (calendarToken) {
+        url = `/api/calendar/${calendarToken}/posts/${postId}/comments`
+      } else if (shareToken) {
+        url = `/api/share/${shareToken}/comments`
+      } else {
+        url = `/api/posts/${postId}/comments`
+      }
 
       const requestBody: any = {
         commentText: commentText.trim(),
@@ -200,8 +212,8 @@ export default function CommentableTweetMockup({
         endOffset: selection.endOffset
       }
 
-      // Add guest name if it's a share token
-      if (shareToken && guestName.trim()) {
+      // Add guest name if it's a share token or calendar token
+      if ((shareToken || calendarToken) && guestName.trim()) {
         requestBody.guestName = guestName.trim()
       }
 
@@ -558,8 +570,8 @@ export default function CommentableTweetMockup({
             "{selection.text}"
           </div>
 
-          {/* Guest Name Input - Only show for share links */}
-          {shareToken && (
+          {/* Guest Name Input - Only show for share links or calendar links */}
+          {(shareToken || calendarToken) && (
             <input
               type="text"
               value={guestName}
@@ -588,7 +600,7 @@ export default function CommentableTweetMockup({
             </button>
             <button
               onClick={handleAddComment}
-              disabled={!commentText.trim() || (shareToken ? !guestName.trim() : false)}
+              disabled={!commentText.trim() || ((shareToken || calendarToken) ? !guestName.trim() : false)}
               className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Add Comment
