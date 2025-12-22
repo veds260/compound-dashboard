@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns'
-import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon, ChatBubbleLeftIcon, ArrowTopRightOnSquareIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline'
+import useSWR from 'swr'
 import TweetMockup from '@/components/TweetMockup'
+import toast, { Toaster } from 'react-hot-toast'
 
 interface Client {
   id: string
@@ -13,6 +15,15 @@ interface Client {
   twitterHandle: string | null
   profilePicture: string | null
   timezone: string | null
+}
+
+interface Comment {
+  id: string
+  userName: string
+  userRole: string
+  commentText: string
+  selectedText: string
+  createdAt: string
 }
 
 interface Post {
@@ -26,6 +37,16 @@ interface Post {
   media: string | null
   createdAt: string
   client: Client
+  comments?: Comment[]
+}
+
+// SWR fetcher
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error('Failed to fetch')
+  }
+  return response.json()
 }
 
 // Helper function to parse timezone offset
@@ -74,39 +95,64 @@ export default function SharedCalendarPage() {
   const params = useParams()
   const token = params.token as string
 
-  const [client, setClient] = useState<Client | null>(null)
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Use SWR for real-time sync - refreshes every 30 seconds
+  const { data, error: swrError, isLoading, mutate } = useSWR<{ client: Client; posts: Post[] }>(
+    token ? `/api/calendar/${token}` : null,
+    fetcher,
+    {
+      refreshInterval: 30000, // Refresh every 30 seconds for real-time sync
+      revalidateOnFocus: true,
+      keepPreviousData: true,
+    }
+  )
+
+  const client = data?.client || null
+  const posts = data?.posts || []
+  const loading = isLoading
+  const error = swrError ? 'This calendar link is invalid or has been revoked.' : null
+
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [postMedia, setPostMedia] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
 
-  useEffect(() => {
-    fetchCalendarData()
-  }, [token])
+  // Submit a comment
+  const handleSubmitComment = async () => {
+    if (!selectedPost || !newComment.trim()) return
 
-  const fetchCalendarData = async () => {
+    setSubmittingComment(true)
     try {
-      const response = await fetch(`/api/calendar/${token}`)
+      const response = await fetch(`/api/calendar/${token}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: selectedPost.id,
+          commentText: newComment.trim(),
+        })
+      })
+
       if (!response.ok) {
-        if (response.status === 404) {
-          setError('This calendar link is invalid or has been revoked.')
-        } else {
-          setError('Failed to load calendar.')
-        }
-        setLoading(false)
-        return
+        throw new Error('Failed to submit comment')
       }
 
-      const data = await response.json()
-      setClient(data.client)
-      setPosts(data.posts)
-      setLoading(false)
-    } catch (error) {
-      console.error('Error fetching calendar:', error)
-      setError('Failed to load calendar.')
-      setLoading(false)
+      // Refresh the data to show the new comment
+      await mutate()
+
+      // Update the selected post with new comments
+      const updatedData = await fetcher(`/api/calendar/${token}`)
+      const updatedPost = updatedData.posts.find((p: Post) => p.id === selectedPost.id)
+      if (updatedPost) {
+        setSelectedPost(updatedPost)
+      }
+
+      setNewComment('')
+      toast.success('Comment added successfully!')
+    } catch (err) {
+      console.error('Error submitting comment:', err)
+      toast.error('Failed to submit comment')
+    } finally {
+      setSubmittingComment(false)
     }
   }
 
@@ -451,11 +497,91 @@ export default function SharedCalendarPage() {
                     </span>
                   </div>
                 )}
+
+                {/* Open in Typefully Button */}
+                {selectedPost.typefullyUrl && (
+                  <div className="pt-4">
+                    <a
+                      href={selectedPost.typefullyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                    >
+                      <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                      Open in Typefully
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Comments Section */}
+              <div className="mt-8 border-t border-gray-700 pt-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ChatBubbleLeftIcon className="h-5 w-5 text-gray-400" />
+                  <h4 className="text-base font-medium text-white">
+                    Comments ({selectedPost.comments?.length || 0})
+                  </h4>
+                </div>
+
+                {/* Existing Comments */}
+                {selectedPost.comments && selectedPost.comments.length > 0 ? (
+                  <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                    {selectedPost.comments.map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="bg-gray-900/50 rounded-lg p-3 border border-gray-700"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-400">
+                            {comment.userName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {format(new Date(comment.createdAt), 'MMM d, h:mm a')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-300">{comment.commentText}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 mb-4">No comments yet. Be the first to leave feedback!</p>
+                )}
+
+                {/* Add Comment Form */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSubmitComment()
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleSubmitComment}
+                    disabled={!newComment.trim() || submittingComment}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  >
+                    {submittingComment ? (
+                      <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <PaperAirplaneIcon className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Toast notifications */}
+      <Toaster position="bottom-right" />
     </div>
   )
 }

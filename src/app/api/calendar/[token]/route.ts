@@ -30,6 +30,7 @@ export async function GET(
     }
 
     // Fetch all posts for this client that have scheduled or published dates
+    // Include comments for each post
     const posts = await prisma.post.findMany({
       where: {
         clientId: client.id,
@@ -47,7 +48,18 @@ export async function GET(
         typefullyUrl: true,
         status: true,
         media: true,
-        createdAt: true
+        createdAt: true,
+        comments: {
+          select: {
+            id: true,
+            userName: true,
+            userRole: true,
+            commentText: true,
+            selectedText: true,
+            createdAt: true
+          },
+          orderBy: { createdAt: 'asc' }
+        }
       },
       orderBy: [
         { scheduledDate: 'asc' },
@@ -71,6 +83,10 @@ export async function GET(
     return NextResponse.json({
       client,
       posts: postsWithClient
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      }
     })
   } catch (error) {
     console.error('Error fetching shared calendar:', error)
