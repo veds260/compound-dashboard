@@ -155,13 +155,15 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     tweetText: '',
     scheduledDate: null as Date | null,
     typefullyUrl: '',
-    clientId: clientId || ''
+    clientId: clientId || '',
+    mediaFiles: [] as File[]
   })
   const [bulkPosts, setBulkPosts] = useState<Array<{
     content: string
     tweetText: string
     typefullyUrl: string
     scheduledDate: Date | null
+    mediaFiles: File[]
   }>>([])
   const [bulkClientId, setBulkClientId] = useState<string>(clientId || '')
   const [editPost, setEditPost] = useState({
@@ -455,9 +457,30 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       }
 
       const createdPost = await response.json()
+
+      // Upload media if any files were selected
+      if (newPost.mediaFiles.length > 0) {
+        const formData = new FormData()
+        newPost.mediaFiles.forEach(file => {
+          formData.append('files', file)
+        })
+        formData.append('tweetIndex', '0')
+
+        const mediaResponse = await fetch(`/api/posts/${createdPost.id}/media`, {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!mediaResponse.ok) {
+          const mediaError = await mediaResponse.json()
+          console.error('Failed to upload media:', mediaError)
+          toast.error('Post created but media upload failed: ' + (mediaError.error || 'Unknown error'))
+        }
+      }
+
       mutatePosts()
       setIsModalOpen(false)
-      setNewPost({ content: '', tweetText: '', scheduledDate: null, typefullyUrl: '', clientId: clientId || '' })
+      setNewPost({ content: '', tweetText: '', scheduledDate: null, typefullyUrl: '', clientId: clientId || '', mediaFiles: [] })
       toast.success('Post created successfully')
     } catch (error) {
       console.error('Error creating post:', error)
@@ -728,7 +751,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       content: '',
       tweetText: '',
       typefullyUrl: '',
-      scheduledDate: null
+      scheduledDate: null,
+      mediaFiles: [] as File[]
     }))
 
     setBulkPosts(emptyPosts)
@@ -753,7 +777,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       toast.error('Maximum 50 posts at a time')
       return
     }
-    setBulkPosts([...bulkPosts, { content: '', tweetText: '', typefullyUrl: '', scheduledDate: null }])
+    setBulkPosts([...bulkPosts, { content: '', tweetText: '', typefullyUrl: '', scheduledDate: null, mediaFiles: [] }])
   }
 
   const handleRemoveBulkRow = (index: number) => {
@@ -825,6 +849,25 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
           }
 
           const createdPost = await response.json()
+
+          // Upload media if any files were selected for this post
+          if (post.mediaFiles && post.mediaFiles.length > 0) {
+            const formData = new FormData()
+            post.mediaFiles.forEach(file => {
+              formData.append('files', file)
+            })
+            formData.append('tweetIndex', '0')
+
+            const mediaResponse = await fetch(`/api/posts/${createdPost.id}/media`, {
+              method: 'POST',
+              body: formData
+            })
+
+            if (!mediaResponse.ok) {
+              console.error('Failed to upload media for post')
+            }
+          }
+
           createdPosts.push(createdPost)
           successCount++
         } catch (error) {
@@ -1327,6 +1370,89 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                 <p className="text-xs text-gray-400 mt-1">{newPost.tweetText.length} characters</p>
               </div>
 
+              {/* Image Upload Section */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Images (optional)
+                </label>
+                <div
+                  className="border-2 border-dashed border-theme-border rounded-md p-4 hover:border-theme-accent transition-colors cursor-pointer"
+                  onClick={() => document.getElementById('newPostImageInput')?.click()}
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items
+                    if (items) {
+                      const imageFiles: File[] = []
+                      for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.startsWith('image/')) {
+                          const file = items[i].getAsFile()
+                          if (file) imageFiles.push(file)
+                        }
+                      }
+                      if (imageFiles.length > 0) {
+                        e.preventDefault()
+                        const totalFiles = newPost.mediaFiles.length + imageFiles.length
+                        if (totalFiles > 4) {
+                          toast.error('Maximum 4 images per post')
+                          return
+                        }
+                        setNewPost({ ...newPost, mediaFiles: [...newPost.mediaFiles, ...imageFiles] })
+                        toast.success(`Added ${imageFiles.length} image(s)`)
+                      }
+                    }
+                  }}
+                  tabIndex={0}
+                >
+                  <input
+                    id="newPostImageInput"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      const totalFiles = newPost.mediaFiles.length + files.length
+                      if (totalFiles > 4) {
+                        toast.error('Maximum 4 images per post')
+                        return
+                      }
+                      setNewPost({ ...newPost, mediaFiles: [...newPost.mediaFiles, ...files] })
+                      e.target.value = '' // Reset input
+                    }}
+                  />
+                  <div className="text-center">
+                    <PhotoIcon className="mx-auto h-8 w-8 text-gray-400" />
+                    <p className="mt-1 text-sm text-gray-400">
+                      Click to upload or paste images (Ctrl+V)
+                    </p>
+                    <p className="text-xs text-gray-500">Max 4 images, 3MB each</p>
+                  </div>
+                </div>
+                {/* Image Previews */}
+                {newPost.mediaFiles.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {newPost.mediaFiles.map((file, idx) => (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={`Preview ${idx + 1}`}
+                          className="h-16 w-16 object-cover rounded-md border border-theme-border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedFiles = newPost.mediaFiles.filter((_, i) => i !== idx)
+                            setNewPost({ ...newPost, mediaFiles: updatedFiles })
+                          }}
+                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <XCircleIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
                   Typefully URL *
@@ -1505,7 +1631,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1">
                           Post Content *
@@ -1557,6 +1683,95 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           onChange={(date) => handleUpdateBulkPostDate(index, date)}
                           placeholder="Select date/time"
                         />
+                      </div>
+
+                      {/* Image Upload for Bulk Post */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Images (optional)
+                        </label>
+                        <div
+                          className="border border-dashed border-theme-border rounded-md p-2 hover:border-theme-accent transition-colors cursor-pointer min-h-[60px] flex flex-col justify-center"
+                          onClick={() => document.getElementById(`bulkPostImageInput-${index}`)?.click()}
+                          onPaste={(e) => {
+                            const items = e.clipboardData?.items
+                            if (items) {
+                              const imageFiles: File[] = []
+                              for (let i = 0; i < items.length; i++) {
+                                if (items[i].type.startsWith('image/')) {
+                                  const file = items[i].getAsFile()
+                                  if (file) imageFiles.push(file)
+                                }
+                              }
+                              if (imageFiles.length > 0) {
+                                e.preventDefault()
+                                const currentFiles = post.mediaFiles || []
+                                const totalFiles = currentFiles.length + imageFiles.length
+                                if (totalFiles > 4) {
+                                  toast.error('Maximum 4 images per post')
+                                  return
+                                }
+                                const updatedPosts = [...bulkPosts]
+                                updatedPosts[index] = { ...updatedPosts[index], mediaFiles: [...currentFiles, ...imageFiles] }
+                                setBulkPosts(updatedPosts)
+                                toast.success(`Added ${imageFiles.length} image(s)`)
+                              }
+                            }
+                          }}
+                          tabIndex={0}
+                        >
+                          <input
+                            id={`bulkPostImageInput-${index}`}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || [])
+                              const currentFiles = post.mediaFiles || []
+                              const totalFiles = currentFiles.length + files.length
+                              if (totalFiles > 4) {
+                                toast.error('Maximum 4 images per post')
+                                return
+                              }
+                              const updatedPosts = [...bulkPosts]
+                              updatedPosts[index] = { ...updatedPosts[index], mediaFiles: [...currentFiles, ...files] }
+                              setBulkPosts(updatedPosts)
+                              e.target.value = ''
+                            }}
+                          />
+                          {(!post.mediaFiles || post.mediaFiles.length === 0) ? (
+                            <div className="text-center">
+                              <PhotoIcon className="mx-auto h-5 w-5 text-gray-500" />
+                              <p className="text-xs text-gray-500 mt-1">Click or paste</p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {post.mediaFiles.map((file, fileIdx) => (
+                                <div key={fileIdx} className="relative group">
+                                  <img
+                                    src={URL.createObjectURL(file)}
+                                    alt={`Preview ${fileIdx + 1}`}
+                                    className="h-10 w-10 object-cover rounded border border-theme-border"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      const updatedFiles = post.mediaFiles.filter((_, i) => i !== fileIdx)
+                                      const updatedPosts = [...bulkPosts]
+                                      updatedPosts[index] = { ...updatedPosts[index], mediaFiles: updatedFiles }
+                                      setBulkPosts(updatedPosts)
+                                    }}
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <XCircleIcon className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
