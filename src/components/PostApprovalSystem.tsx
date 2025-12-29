@@ -2055,7 +2055,33 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
           setIsMockupModalOpen(false)
           setMockupPost(null)
         }}>
-          <div className="bg-theme-card/95 backdrop-blur-sm rounded-xl w-full max-w-6xl shadow-large border border-theme-border max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="bg-theme-card/95 backdrop-blur-sm rounded-xl w-full max-w-6xl shadow-large border border-theme-border max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+            onPaste={(e) => {
+              const items = e.clipboardData?.items
+              if (items && postMedia.length < 4) {
+                const imageFiles: File[] = []
+                for (let i = 0; i < items.length; i++) {
+                  if (items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile()
+                    if (file) imageFiles.push(file)
+                  }
+                }
+                if (imageFiles.length > 0) {
+                  e.preventDefault()
+                  const remainingSlots = 4 - postMedia.length
+                  const filesToUpload = imageFiles.slice(0, remainingSlots)
+                  const dataTransfer = new DataTransfer()
+                  filesToUpload.forEach(f => dataTransfer.items.add(f))
+                  handleMediaUpload(dataTransfer.files)
+                  if (imageFiles.length > remainingSlots) {
+                    toast.error(`Only uploaded ${remainingSlots} image(s). Maximum 4 images per post.`)
+                  }
+                }
+              }
+            }}
+          >
             <div className="sticky top-0 bg-theme-card border-b border-theme-border px-6 py-4 flex items-center justify-between z-10">
               <div className="flex items-center space-x-3">
                 <h3 className="text-lg font-medium text-white">Post Preview</h3>
@@ -2307,7 +2333,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                                 />
                               </label>
                             )}
-                            <p className="text-xs text-gray-500">Max 3MB per image, 4 images total</p>
+                            <p className="text-xs text-gray-500">Max 3MB per image, 4 images total. Paste with Ctrl+V</p>
                           </div>
                         )}
 
