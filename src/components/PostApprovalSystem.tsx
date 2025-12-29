@@ -1351,8 +1351,28 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                   rows={4}
                   value={newPost.content}
                   onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items
+                    if (items) {
+                      for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.startsWith('image/')) {
+                          const file = items[i].getAsFile()
+                          if (file) {
+                            e.preventDefault()
+                            if (newPost.mediaFiles.length >= 4) {
+                              toast.error('Maximum 4 images per post')
+                              return
+                            }
+                            setNewPost({ ...newPost, mediaFiles: [...newPost.mediaFiles, file] })
+                            toast.success('Image added')
+                          }
+                          break
+                        }
+                      }
+                    }
+                  }}
                   className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
-                  placeholder="Enter the post content..."
+                  placeholder="Enter the post content... (paste images here)"
                 />
               </div>
 
@@ -1364,8 +1384,28 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                   rows={3}
                   value={newPost.tweetText}
                   onChange={(e) => setNewPost({ ...newPost, tweetText: e.target.value })}
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items
+                    if (items) {
+                      for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.startsWith('image/')) {
+                          const file = items[i].getAsFile()
+                          if (file) {
+                            e.preventDefault()
+                            if (newPost.mediaFiles.length >= 4) {
+                              toast.error('Maximum 4 images per post')
+                              return
+                            }
+                            setNewPost({ ...newPost, mediaFiles: [...newPost.mediaFiles, file] })
+                            toast.success('Image added')
+                          }
+                          break
+                        }
+                      }
+                    }
+                  }}
                   className="w-full rounded-md border border-theme-border bg-theme-bg text-gray-200 placeholder-gray-500 shadow-sm focus:border-theme-accent focus:ring-theme-accent p-3"
-                  placeholder="Enter the tweet text..."
+                  placeholder="Enter the tweet text... (paste images here)"
                 />
                 <p className="text-xs text-gray-400 mt-1">{newPost.tweetText.length} characters</p>
               </div>
@@ -1641,8 +1681,31 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           rows={3}
                           value={post.content}
                           onChange={(e) => handleUpdateBulkPost(index, 'content', e.target.value)}
+                          onPaste={(e) => {
+                            const items = e.clipboardData?.items
+                            if (items) {
+                              for (let i = 0; i < items.length; i++) {
+                                if (items[i].type.startsWith('image/')) {
+                                  const file = items[i].getAsFile()
+                                  if (file) {
+                                    e.preventDefault()
+                                    const currentFiles = post.mediaFiles || []
+                                    if (currentFiles.length >= 4) {
+                                      toast.error('Maximum 4 images per post')
+                                      return
+                                    }
+                                    const updatedPosts = [...bulkPosts]
+                                    updatedPosts[index] = { ...updatedPosts[index], mediaFiles: [...currentFiles, file] }
+                                    setBulkPosts(updatedPosts)
+                                    toast.success('Image added')
+                                  }
+                                  break
+                                }
+                              }
+                            }
+                          }}
                           className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent p-2"
-                          placeholder="Enter post content..."
+                          placeholder="Content (paste images here)"
                         />
                       </div>
 
@@ -1654,8 +1717,31 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
                           rows={3}
                           value={post.tweetText}
                           onChange={(e) => handleUpdateBulkPost(index, 'tweetText', e.target.value)}
+                          onPaste={(e) => {
+                            const items = e.clipboardData?.items
+                            if (items) {
+                              for (let i = 0; i < items.length; i++) {
+                                if (items[i].type.startsWith('image/')) {
+                                  const file = items[i].getAsFile()
+                                  if (file) {
+                                    e.preventDefault()
+                                    const currentFiles = post.mediaFiles || []
+                                    if (currentFiles.length >= 4) {
+                                      toast.error('Maximum 4 images per post')
+                                      return
+                                    }
+                                    const updatedPosts = [...bulkPosts]
+                                    updatedPosts[index] = { ...updatedPosts[index], mediaFiles: [...currentFiles, file] }
+                                    setBulkPosts(updatedPosts)
+                                    toast.success('Image added')
+                                  }
+                                  break
+                                }
+                              }
+                            }
+                          }}
                           className="w-full rounded-md border border-theme-border bg-theme-card text-gray-200 placeholder-gray-500 text-sm shadow-sm focus:border-theme-accent focus:ring-theme-accent p-2"
-                          placeholder="Enter tweet text..."
+                          placeholder="Tweet (paste images here)"
                         />
                         <p className="text-xs text-gray-500 mt-1">{post.tweetText.length} chars</p>
                       </div>
