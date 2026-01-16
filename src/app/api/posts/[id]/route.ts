@@ -17,13 +17,15 @@ export async function PUT(
     const { id } = params
     const { status, feedback, content, scheduledDate, typefullyUrl, tweetText } = await request.json()
 
-    // Get the post first to check permissions
+    // Get only the fields needed for permission check
     const post = await prisma.post.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        clientId: true,
         client: {
-          include: {
-            agency: true
+          select: {
+            agencyId: true
           }
         }
       }

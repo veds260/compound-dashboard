@@ -117,17 +117,31 @@ export default function ClientDashboard() {
   const [feedbackAction, setFeedbackAction] = useState<'SUGGEST_CHANGES' | 'REJECTED'>('SUGGEST_CHANGES')
   const [feedback, setFeedback] = useState('')
 
-  // Use SWR for caching with 30 second refresh - keepPreviousData prevents flash
+  // Use SWR for caching with optimized settings
+  // - dedupingInterval prevents duplicate requests within 10s
+  // - revalidateIfStale: false prevents refetch on mount if cache is fresh
   const { data: stats, mutate: mutateStats, isLoading: statsLoading } = useSWR<ClientStats>(
     session?.user?.role === 'CLIENT' ? '/api/client/stats' : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true, keepPreviousData: true }
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
+      dedupingInterval: 10000,
+      revalidateIfStale: false
+    }
   )
 
   const { data: postsData, mutate: mutatePosts, isLoading: postsLoading } = useSWR<{ posts: Post[], pagination: any }>(
     session?.user?.clientId ? `/api/posts?clientId=${session.user.clientId}&limit=50` : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true, keepPreviousData: true }
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
+      dedupingInterval: 10000,
+      revalidateIfStale: false
+    }
   )
 
   // Extract posts from response

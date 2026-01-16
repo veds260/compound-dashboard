@@ -38,6 +38,10 @@ export async function GET() {
       scheduledPosts,
       pendingApprovals,
       analyticsData: approvedPosts
+    }, {
+      headers: {
+        'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      }
     })
   } catch (error) {
     console.error('Error fetching client stats:', error)

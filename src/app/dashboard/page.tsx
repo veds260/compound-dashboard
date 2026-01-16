@@ -29,7 +29,13 @@ export default function AgencyDashboard() {
   const { data: stats, isLoading } = useSWR<DashboardStats>(
     session?.user?.role === 'AGENCY' ? '/api/dashboard/stats' : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true }
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
+      dedupingInterval: 10000,
+      revalidateIfStale: false
+    }
   )
 
   useEffect(() => {

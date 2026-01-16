@@ -44,6 +44,10 @@ export async function GET() {
       totalPosts,
       pendingApprovals,
       totalUploads
+    }, {
+      headers: {
+        'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      }
     })
   } catch (error) {
     console.error('Error fetching dashboard stats:', error)

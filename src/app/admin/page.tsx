@@ -41,13 +41,25 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } = useSWR<AdminStats>(
     session?.user?.role === 'ADMIN' ? '/api/admin/stats' : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true }
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
+      dedupingInterval: 10000,
+      revalidateIfStale: false
+    }
   )
 
   const { data: writers, isLoading: writersLoading } = useSWR<WriterOverview[]>(
     session?.user?.role === 'ADMIN' ? '/api/admin/writers' : null,
     fetcher,
-    { refreshInterval: 30000, revalidateOnFocus: true }
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
+      dedupingInterval: 10000,
+      revalidateIfStale: false
+    }
   )
 
   const loading = statsLoading || writersLoading

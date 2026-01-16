@@ -106,6 +106,7 @@ export async function GET(request: NextRequest) {
     ])
 
     // Return with pagination metadata
+    // Use stale-while-revalidate for better UX - serve cached content while fetching fresh
     return NextResponse.json({
       posts,
       pagination: {
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
       }
     }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Cache-Control': 'private, max-age=5, stale-while-revalidate=30',
       }
     })
   } catch (error) {
