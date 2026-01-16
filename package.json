@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma db push --accept-data-loss && prisma generate && next build",
-    "start": "npm run test-connection && npm run seed-admin && next start",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "db:push": "prisma db push",
     "lint": "next lint",
     "seed-admin": "node scripts/seed-admin.js",
     "reset-migrations": "node scripts/reset-migrations.js",
