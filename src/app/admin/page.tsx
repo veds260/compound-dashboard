@@ -2,17 +2,19 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import Layout from '@/components/Layout'
 import PremiumCard from '@/components/PremiumCard'
+import toast from 'react-hot-toast'
 import {
   UserGroupIcon,
   DocumentTextIcon,
   ChartBarIcon,
   BuildingOfficeIcon,
   EyeIcon,
-  CloudArrowUpIcon
+  CloudArrowUpIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline'
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
@@ -37,6 +39,26 @@ interface WriterOverview {
 export default function AdminDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [setupStatus, setSetupStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+
+  // Run performance setup
+  const runSetup = async () => {
+    setSetupStatus('loading')
+    try {
+      const res = await fetch('/api/setup-stats', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(data.message || 'Performance boost enabled!')
+        setSetupStatus('done')
+      } else {
+        toast.error(data.error || 'Setup failed')
+        setSetupStatus('idle')
+      }
+    } catch (err) {
+      toast.error('Setup failed')
+      setSetupStatus('idle')
+    }
+  }
 
   const { data: stats, isLoading: statsLoading } = useSWR<AdminStats>(
     session?.user?.role === 'ADMIN' ? '/api/admin/stats' : null,
@@ -186,6 +208,20 @@ export default function AdminDashboard() {
               >
                 <CloudArrowUpIcon className="h-5 w-5 mr-2 text-gray-400 dark:text-gray-500" />
                 Upload History
+              </button>
+              <button
+                onClick={runSetup}
+                disabled={setupStatus === 'loading' || setupStatus === 'done'}
+                className={`inline-flex items-center px-6 py-3 border rounded-xl shadow-sm text-sm font-medium transition-all duration-200 ${
+                  setupStatus === 'done'
+                    ? 'border-green-500/60 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 cursor-default'
+                    : setupStatus === 'loading'
+                    ? 'border-yellow-500/60 text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 cursor-wait'
+                    : 'border-purple-500/60 text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:scale-105'
+                }`}
+              >
+                <BoltIcon className={`h-5 w-5 mr-2 ${setupStatus === 'loading' ? 'animate-pulse' : ''}`} />
+                {setupStatus === 'done' ? 'Performance Boost Active' : setupStatus === 'loading' ? 'Setting up...' : 'Enable Performance Boost'}
               </button>
             </div>
           </div>
