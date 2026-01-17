@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { startPerf, perfLog } from '@/lib/perf-logger'
 
 export async function GET(request: NextRequest) {
+  const apiStart = startPerf()
   try {
+    const sessionStart = startPerf()
     const session = await getServerSession(authOptions)
+    perfLog('API /api/posts - getServerSession', sessionStart)
 
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -71,6 +75,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Run count and findMany in parallel for better performance
+    const dbStart = startPerf()
     const [posts, totalCount] = await Promise.all([
       prisma.post.findMany({
         where: whereClause,
@@ -104,6 +109,9 @@ export async function GET(request: NextRequest) {
       }),
       prisma.post.count({ where: whereClause })
     ])
+    perfLog('API /api/posts - DB query (posts + count)', dbStart)
+
+    perfLog('API /api/posts - TOTAL', apiStart)
 
     // Return with pagination metadata
     // Use stale-while-revalidate for better UX - serve cached content while fetching fresh

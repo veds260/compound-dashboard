@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getClientPostsForApproval } from '@/lib/data/client-data'
+import { startPerf, perfLog } from '@/lib/perf-logger'
 import ClientPostsContent from './client-posts-content'
 
 interface PageProps {
@@ -9,7 +10,11 @@ interface PageProps {
 }
 
 export default async function ClientPostsPage({ searchParams }: PageProps) {
+  const pageStart = startPerf()
+
+  const sessionStart = startPerf()
   const session = await getServerSession(authOptions)
+  perfLog('/client/posts - getServerSession', sessionStart)
 
   if (!session) {
     redirect('/login')
@@ -25,7 +30,9 @@ export default async function ClientPostsPage({ searchParams }: PageProps) {
   }
 
   // Fetch posts on the server (cached for 30 seconds)
+  const postsStart = startPerf()
   const posts = await getClientPostsForApproval(clientId, 50)
+  perfLog('/client/posts - getClientPostsForApproval', postsStart)
 
   // Serialize dates for client component
   const serializedPosts = posts.map(post => ({
@@ -37,6 +44,8 @@ export default async function ClientPostsPage({ searchParams }: PageProps) {
 
   const params = await searchParams
   const initialFilter = params.filter || undefined
+
+  perfLog('/client/posts - TOTAL SERVER TIME', pageStart)
 
   return (
     <ClientPostsContent

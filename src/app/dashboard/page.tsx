@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import useSWR from 'swr'
 import Layout from '@/components/Layout'
 import PremiumCard from '@/components/PremiumCard'
@@ -13,7 +13,18 @@ import {
   CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
 
-const fetcher = (url: string) => fetch(url).then(res => res.json())
+// Track when the module was loaded
+const moduleLoadTime = Date.now()
+
+const fetcher = (url: string) => {
+  const start = Date.now()
+  return fetch(url).then(res => res.json()).then(data => {
+    const duration = Date.now() - start
+    const emoji = duration < 100 ? '🟢' : duration < 500 ? '🟡' : '🔴'
+    console.log(`${emoji} [CLIENT-PERF] /dashboard - SWR fetch /api/dashboard/stats: ${duration}ms`)
+    return data
+  })
+}
 
 interface DashboardStats {
   totalClients: number
@@ -37,6 +48,17 @@ export default function AgencyDashboard() {
       revalidateIfStale: false
     }
   )
+
+  const hasLoggedHydration = useRef(false)
+
+  useEffect(() => {
+    if (!hasLoggedHydration.current) {
+      hasLoggedHydration.current = true
+      const hydrationTime = Date.now() - moduleLoadTime
+      const emoji = hydrationTime < 100 ? '🟢' : hydrationTime < 500 ? '🟡' : '🔴'
+      console.log(`${emoji} [CLIENT-PERF] /dashboard - Component hydrated: ${hydrationTime}ms since module load`)
+    }
+  }, [])
 
   useEffect(() => {
     if (status === 'loading') return

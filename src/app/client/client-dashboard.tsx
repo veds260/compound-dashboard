@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+
+// Track when the module was loaded (before hydration)
+const moduleLoadTime = Date.now()
 import ErrorBoundary from '@/components/ErrorBoundary'
 import PremiumCard from '@/components/PremiumCard'
 import { ClockIcon, ArrowsPointingOutIcon, CheckCircleIcon, XCircleIcon, ArrowTopRightOnSquareIcon, CheckIcon } from '@heroicons/react/24/outline'
@@ -94,6 +97,14 @@ export default function ClientDashboard({ initialStats, initialPosts }: ClientDa
   const [feedback, setFeedback] = useState('')
   const [stats, setStats] = useState(initialStats)
   const [posts, setPosts] = useState(initialPosts)
+
+  // Log client-side hydration time
+  useEffect(() => {
+    const hydrationTime = Date.now() - moduleLoadTime
+    const emoji = hydrationTime < 100 ? '🟢' : hydrationTime < 500 ? '🟡' : '🔴'
+    console.log(`${emoji} [CLIENT-PERF] /client - Component hydrated: ${hydrationTime}ms since module load`)
+    console.log(`${emoji} [CLIENT-PERF] /client - Initial posts count: ${initialPosts.length}, stats loaded: ${JSON.stringify(initialStats)}`)
+  }, [])
 
   const handleStatusUpdate = async (postId: string, newStatus: string, feedbackText?: string) => {
     try {

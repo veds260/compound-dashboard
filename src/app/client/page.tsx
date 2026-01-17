@@ -2,11 +2,16 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getClientStats, getClientPosts } from '@/lib/data/client-data'
+import { startPerf, perfLog } from '@/lib/perf-logger'
 import ClientDashboard from './client-dashboard'
 
 export default async function ClientPage() {
+  const pageStart = startPerf()
+
   // Get session on the server
+  const sessionStart = startPerf()
   const session = await getServerSession(authOptions)
+  perfLog('/client - getServerSession', sessionStart)
 
   // Redirect if not authenticated
   if (!session) {
@@ -34,10 +39,14 @@ export default async function ClientPage() {
   }
 
   // Fetch data on the server (cached for 30 seconds)
+  const dataStart = startPerf()
   const [stats, posts] = await Promise.all([
     getClientStats(clientId),
     getClientPosts(clientId, 50)
   ])
+  perfLog('/client - getClientStats + getClientPosts', dataStart)
+
+  perfLog('/client - TOTAL SERVER TIME', pageStart)
 
   // Pass data to client component
   return (
