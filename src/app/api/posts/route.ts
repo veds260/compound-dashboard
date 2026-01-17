@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { startPerf, perfLog } from '@/lib/perf-logger'
+import { updateClientStats } from '@/lib/stats-manager'
 
 export async function GET(request: NextRequest) {
   const apiStart = startPerf()
@@ -193,6 +194,11 @@ export async function POST(request: NextRequest) {
         }
       }
     })
+
+    // Update cached stats
+    updateClientStats(clientId).catch(err =>
+      console.error('Failed to update stats:', err)
+    )
 
     return NextResponse.json(post)
   } catch (error) {

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
-import { unstable_cache } from 'next/cache'
 import { startPerf, perfLog } from '@/lib/perf-logger'
+import { getClientStatsFromCache } from '@/lib/stats-manager'
 
 export interface ClientStats {
   scheduledPosts: number
@@ -25,83 +25,44 @@ export interface Post {
   } | null
 }
 
-// Single query to get all stats at once (reduces 3 round trips to 1)
-async function fetchClientStats(clientId: string): Promise<ClientStats> {
-  const dbStart = startPerf()
-
-  // Use raw query to get all counts in a single round trip
-  const result = await prisma.$queryRaw<[{ scheduled: bigint; pending: bigint; approved: bigint }]>`
-    SELECT
-      COUNT(*) FILTER (WHERE "scheduledDate" >= NOW()) as scheduled,
-      COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
-      COUNT(*) FILTER (WHERE status = 'APPROVED') as approved
-    FROM "Post"
-    WHERE "clientId" = ${clientId}
-  `
-
-  perfLog('DB - getClientStats (single query)', dbStart)
-
-  return {
-    scheduledPosts: Number(result[0].scheduled),
-    pendingApprovals: Number(result[0].pending),
-    analyticsData: Number(result[0].approved)
-  }
+// Get stats from pre-computed cache table (instant)
+export async function getClientStats(clientId: string): Promise<ClientStats> {
+  return getClientStatsFromCache(clientId)
 }
 
-// Cached function to get client stats
-export const getClientStats = unstable_cache(
-  async (clientId: string): Promise<ClientStats> => {
-    console.log('📊 [CACHE MISS] getClientStats - fetching from DB')
-    return fetchClientStats(clientId)
-  },
-  ['client-stats'],
-  {
-    revalidate: 30,
-    tags: ['client-stats']
-  }
-)
+// Get client posts (no server-side cache - relies on client-side IndexedDB)
+export async function getClientPosts(clientId: string, limit: number = 50): Promise<Post[]> {
+  const dbStart = startPerf()
 
-// Cached function to get client posts
-export const getClientPosts = unstable_cache(
-  async (clientId: string, limit: number = 50): Promise<Post[]> => {
-    console.log('📊 [CACHE MISS] getClientPosts - fetching from DB')
-    const dbStart = startPerf()
-
-    const posts = await prisma.post.findMany({
-      where: { clientId },
-      select: {
-        id: true,
-        content: true,
-        scheduledDate: true,
-        typefullyUrl: true,
-        status: true,
-        feedback: true,
-        media: true,
-        createdAt: true,
-        client: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            timezone: true
-          }
+  const posts = await prisma.post.findMany({
+    where: { clientId },
+    select: {
+      id: true,
+      content: true,
+      scheduledDate: true,
+      typefullyUrl: true,
+      status: true,
+      feedback: true,
+      media: true,
+      createdAt: true,
+      client: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          timezone: true
         }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: limit
-    })
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    },
+    take: limit
+  })
 
-    perfLog('DB - getClientPosts', dbStart)
-    return posts as Post[]
-  },
-  ['client-posts'],
-  {
-    revalidate: 30,
-    tags: ['client-posts']
-  }
-)
+  perfLog('DB - getClientPosts', dbStart)
+  return posts as Post[]
+}
 
 // Extended post interface for approval system
 export interface PostWithDetails {
@@ -125,53 +86,45 @@ export interface PostWithDetails {
   } | null
 }
 
-// Cached function to get client posts with full details for approval system
-export const getClientPostsForApproval = unstable_cache(
-  async (clientId: string, limit: number = 50): Promise<PostWithDetails[]> => {
-    console.log('📊 [CACHE MISS] getClientPostsForApproval - fetching from DB')
-    const dbStart = startPerf()
+// Get client posts with full details for approval system
+export async function getClientPostsForApproval(clientId: string, limit: number = 50): Promise<PostWithDetails[]> {
+  const dbStart = startPerf()
 
-    const posts = await prisma.post.findMany({
-      where: { clientId },
-      select: {
-        id: true,
-        content: true,
-        tweetText: true,
-        scheduledDate: true,
-        typefullyUrl: true,
-        status: true,
-        feedback: true,
-        media: true,
-        createdAt: true,
-        publishedDate: true,
-        client: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            timezone: true,
-            profilePicture: true,
-            twitterHandle: true
-          }
+  const posts = await prisma.post.findMany({
+    where: { clientId },
+    select: {
+      id: true,
+      content: true,
+      tweetText: true,
+      scheduledDate: true,
+      typefullyUrl: true,
+      status: true,
+      feedback: true,
+      media: true,
+      createdAt: true,
+      publishedDate: true,
+      client: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          timezone: true,
+          profilePicture: true,
+          twitterHandle: true
         }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: limit
-    })
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    },
+    take: limit
+  })
 
-    perfLog('DB - getClientPostsForApproval', dbStart)
-    return posts as PostWithDetails[]
-  },
-  ['client-posts-approval'],
-  {
-    revalidate: 30,
-    tags: ['client-posts']
-  }
-)
+  perfLog('DB - getClientPostsForApproval', dbStart)
+  return posts as PostWithDetails[]
+}
 
-// Non-cached version for when we need fresh data after mutations
+// Alias for backwards compatibility
 export async function getClientStatsUncached(clientId: string): Promise<ClientStats> {
-  return fetchClientStats(clientId)
+  return getClientStatsFromCache(clientId)
 }

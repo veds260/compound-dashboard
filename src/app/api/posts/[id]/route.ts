@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { updateClientStats } from '@/lib/stats-manager'
 
 export async function PUT(
   request: NextRequest,
@@ -93,6 +94,13 @@ export async function PUT(
       }
     })
 
+    // Update cached stats if status changed
+    if (status) {
+      updateClientStats(post.clientId).catch(err =>
+        console.error('Failed to update stats:', err)
+      )
+    }
+
     return NextResponse.json(updatedPost)
   } catch (error) {
     console.error('Error updating post:', error)
@@ -146,9 +154,16 @@ export async function DELETE(
       )
     }
 
+    const clientId = post.clientId
+
     await prisma.post.delete({
       where: { id }
     })
+
+    // Update cached stats
+    updateClientStats(clientId).catch(err =>
+      console.error('Failed to update stats:', err)
+    )
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -27,16 +27,29 @@ import TweetMockup from './TweetMockup'
 import CommentableTweetMockup from './CommentableTweetMockup'
 import CommentList from './CommentList'
 import { PostListSkeleton } from './Skeleton'
+import { getCachedPosts, cachePosts } from '@/lib/cache/indexed-db'
 
-// SWR fetcher function
-const fetcher = async (url: string) => {
+// SWR fetcher with IndexedDB caching
+const createFetcher = (clientId: string | undefined) => async (url: string) => {
+  const start = Date.now()
   const response = await fetch(url)
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
     throw new Error(error.error || 'Failed to fetch')
   }
   const data = await response.json()
-  return data?.posts ?? (Array.isArray(data) ? data : [])
+  const posts = data?.posts ?? (Array.isArray(data) ? data : [])
+
+  // Cache the fresh data in IndexedDB
+  if (clientId && posts.length > 0) {
+    cachePosts(posts, clientId).catch(err =>
+      console.warn('Failed to cache posts:', err)
+    )
+  }
+
+  const duration = Date.now() - start
+  console.log(`🌐 [NETWORK] Fetched ${posts.length} posts in ${duration}ms`)
+  return posts
 }
 // import PostCalendar from './PostCalendar'
 // import ContentDump from './ContentDump'
@@ -99,6 +112,35 @@ function parseTimezoneOffset(timezone: string | undefined): number {
 
 export default function PostApprovalSystem({ userRole, clientId, isAdmin, initialStatusFilter, onClientChange }: PostApprovalSystemProps) {
   const [selectedClient, setSelectedClient] = useState<string>(clientId || '')
+  const [cachedPosts, setCachedPosts] = useState<Post[]>([])
+  const [cacheLoaded, setCacheLoaded] = useState(false)
+
+  // Determine the effective client ID for caching
+  const effectiveClientId = userRole === 'CLIENT' ? clientId : selectedClient
+
+  // Load from IndexedDB cache on mount
+  useEffect(() => {
+    if (!effectiveClientId) {
+      setCacheLoaded(true)
+      return
+    }
+
+    const loadCache = async () => {
+      const start = Date.now()
+      try {
+        const cached = await getCachedPosts(effectiveClientId)
+        if (cached.length > 0) {
+          console.log(`⚡ [CACHE] Loaded ${cached.length} posts from IndexedDB in ${Date.now() - start}ms`)
+          setCachedPosts(cached as Post[])
+        }
+      } catch (err) {
+        console.warn('Failed to load cache:', err)
+      }
+      setCacheLoaded(true)
+    }
+
+    loadCache()
+  }, [effectiveClientId])
 
   // Build the API URL based on user role and selected client
   const postsUrl = useMemo(() => {
@@ -108,17 +150,25 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     return selectedClient ? `/api/posts?clientId=${selectedClient}` : '/api/posts'
   }, [userRole, clientId, selectedClient])
 
+  // Create fetcher with client ID for caching
+  const fetcher = useMemo(() => createFetcher(effectiveClientId), [effectiveClientId])
+
   // Use SWR for data fetching with caching
-  const { data: posts = [], isLoading: loading, mutate: mutatePosts } = useSWR<Post[]>(
+  const { data: freshPosts, isLoading: loadingFresh, mutate: mutatePosts } = useSWR<Post[]>(
     postsUrl,
     fetcher,
     {
-      revalidateOnFocus: true,
+      revalidateOnFocus: false,
       revalidateOnReconnect: true,
-      keepPreviousData: true, // Show old data while fetching new
-      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+      keepPreviousData: true,
+      dedupingInterval: 10000,
+      fallbackData: cachedPosts.length > 0 ? cachedPosts : undefined
     }
   )
+
+  // Use fresh posts if available, otherwise use cache
+  const posts = freshPosts ?? cachedPosts
+  const loading = !cacheLoaded || (loadingFresh && posts.length === 0)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
