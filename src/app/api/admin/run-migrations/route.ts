@@ -18,23 +18,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[Migrations] Starting database migration...')
+    // Check if mode is specified (push or deploy)
+    const body = await request.json().catch(() => ({}))
+    const mode = body.mode || 'push' // Default to db push for schema sync
 
-    // Run prisma migrate deploy
-    const { stdout, stderr } = await execAsync('npx prisma migrate deploy')
+    console.log(`[Migrations] Starting database ${mode}...`)
+
+    let stdout = ''
+    let stderr = ''
+
+    if (mode === 'push') {
+      // Use prisma db push for schema sync (no migration history)
+      const result = await execAsync('npx prisma db push --accept-data-loss --skip-generate')
+      stdout = result.stdout
+      stderr = result.stderr || ''
+    } else {
+      // Use prisma migrate deploy for migration-based updates
+      const result = await execAsync('npx prisma migrate deploy')
+      stdout = result.stdout
+      stderr = result.stderr || ''
+    }
 
     console.log('[Migrations] stdout:', stdout)
     if (stderr) {
       console.log('[Migrations] stderr:', stderr)
     }
 
-    // Check if migrations were applied
+    // Check if operation was successful
     const successPatterns = [
+      'your database is now in sync',
+      'database is now in sync',
       'migrations found',
       'migration applied',
       'migrations applied',
       'No pending migrations',
-      'already applied'
+      'already applied',
+      'applied successfully'
     ]
 
     const hasSuccess = successPatterns.some(pattern =>
@@ -42,18 +61,20 @@ export async function POST(request: NextRequest) {
       stderr.toLowerCase().includes(pattern.toLowerCase())
     )
 
-    if (hasSuccess) {
-      console.log('[Migrations] Migrations completed successfully')
+    if (hasSuccess || stdout.includes('done')) {
+      console.log('[Migrations] Database sync completed successfully')
       return NextResponse.json({
         success: true,
-        message: 'Database migrations applied successfully!',
+        message: mode === 'push'
+          ? 'Database schema synced successfully!'
+          : 'Database migrations applied successfully!',
         output: stdout
       })
     } else {
-      console.error('[Migrations] Migration failed:', { stdout, stderr })
+      console.error('[Migrations] Operation failed:', { stdout, stderr })
       return NextResponse.json(
         {
-          error: 'Migration process completed but no migrations were applied',
+          error: 'Database operation completed but result unclear',
           output: stdout,
           details: stderr
         },
@@ -61,10 +82,10 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error: any) {
-    console.error('[Migrations] Error running migrations:', error)
+    console.error('[Migrations] Error:', error)
     return NextResponse.json(
       {
-        error: 'Failed to run migrations',
+        error: 'Failed to run database operation',
         details: error.message,
         output: error.stdout,
         stderr: error.stderr

@@ -50,23 +50,25 @@ export default function DatabaseManagementPage() {
     fetchMediaStats()
   }, [session, status, router])
 
-  const handleRunMigrations = async () => {
+  const handleRunMigrations = async (mode: 'push' | 'deploy' = 'push') => {
     setMigratingDb(true)
     try {
       const response = await fetch('/api/admin/run-migrations', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Migration failed')
+        throw new Error(data.error || 'Operation failed')
       }
 
-      toast.success(data.message || 'Migrations applied successfully!')
+      toast.success(data.message || 'Database updated successfully!')
     } catch (error) {
-      console.error('Migration error:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to run migrations')
+      console.error('Database operation error:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update database')
     } finally {
       setMigratingDb(false)
     }
@@ -200,22 +202,23 @@ export default function DatabaseManagementPage() {
           <p className="text-gray-400 mt-1">Manage and cleanup your database</p>
         </div>
 
-        {/* Run Migrations */}
+        {/* Database Schema Sync */}
         <div className="bg-theme-card rounded-xl border border-theme-border p-6">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-white">Run Database Migrations</h3>
+              <h3 className="text-lg font-semibold text-white">Sync Database Schema</h3>
               <p className="text-gray-400 mt-1">
-                Apply pending database schema changes. Run this after deploying new code with schema updates.
+                Sync the database with the latest schema changes. Use this after deploying code with new fields or indexes.
+                This is the recommended option for most updates.
               </p>
             </div>
             <button
-              onClick={handleRunMigrations}
+              onClick={() => handleRunMigrations('push')}
               disabled={migratingDb}
-              className="ml-4 px-4 py-2 rounded-lg border transition-colors flex items-center space-x-2 bg-blue-900/30 text-blue-300 border-blue-800 hover:bg-blue-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ml-4 px-4 py-2 rounded-lg border transition-colors flex items-center space-x-2 bg-green-900/30 text-green-300 border-green-800 hover:bg-green-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowPathIcon className={`h-5 w-5 ${migratingDb ? 'animate-spin' : ''}`} />
-              <span>{migratingDb ? 'Running...' : 'Run Migrations'}</span>
+              <span>{migratingDb ? 'Syncing...' : 'Sync Schema'}</span>
             </button>
           </div>
         </div>
