@@ -11,8 +11,10 @@ import PremiumCard from '@/components/PremiumCard'
 import { ClockIcon, ArrowsPointingOutIcon, CheckCircleIcon, XCircleIcon, ArrowTopRightOnSquareIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import type { ClientStats, Post } from '@/lib/data/client-data'
-import { usePriorityPosts } from '@/lib/hooks/use-priority-posts'
+import useSWR from 'swr'
+import type { ClientStats } from '@/lib/data/client-data'
+import { usePriorityPosts, type Post } from '@/lib/hooks/use-priority-posts'
+import { StatCardsSkeletonGrid, PostCardSkeletonGrid } from '@/components/Skeleton'
 
 // Custom Hourglass Icon Component
 function HourglassIcon({ className }: { className?: string }) {
@@ -84,13 +86,13 @@ function convertToLocalTimezone(utcDate: Date | string, timezone?: string | null
 }
 
 interface ClientDashboardProps {
-  initialStats: ClientStats
-  initialPosts: Post[]
   clientId: string
-  recentDays?: number
 }
 
-export default function ClientDashboard({ initialStats, initialPosts, clientId, recentDays = 10 }: ClientDashboardProps) {
+// Fetcher for SWR
+const statsFetcher = (url: string) => fetch(url).then(res => res.json())
+
+export default function ClientDashboard({ clientId }: ClientDashboardProps) {
   const router = useRouter()
   const [statusFilter, setStatusFilter] = useState<string>('PENDING')
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
@@ -98,28 +100,34 @@ export default function ClientDashboard({ initialStats, initialPosts, clientId, 
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
   const [feedbackAction, setFeedbackAction] = useState<'SUGGEST_CHANGES' | 'REJECTED'>('SUGGEST_CHANGES')
   const [feedback, setFeedback] = useState('')
-  const [stats, setStats] = useState(initialStats)
 
-  // Use priority loading hook for background older posts loading
+  // Fetch stats client-side with SWR
+  const { data: stats, mutate: mutateStats } = useSWR<ClientStats>(
+    '/api/client/stats',
+    statsFetcher,
+    { revalidateOnFocus: false, dedupingInterval: 10000 }
+  )
+
+  // Use priority loading hook - fetches from IndexedDB cache first, then API
   const {
     posts,
+    isLoadingRecent,
     isLoadingOlder,
     updatePostLocally
   } = usePriorityPosts({
     clientId,
-    recentDays,
+    recentDays: 10,
     enabled: true
   })
 
-  // Use initial posts until priority hook loads data
-  const displayPosts = posts.length > 0 ? posts : (initialPosts as any[])
+  // Posts to display
+  const displayPosts = posts
 
   // Log client-side hydration time
   useEffect(() => {
     const hydrationTime = Date.now() - moduleLoadTime
     const emoji = hydrationTime < 100 ? '🟢' : hydrationTime < 500 ? '🟡' : '🔴'
     console.log(`${emoji} [CLIENT-PERF] /client - Component hydrated: ${hydrationTime}ms since module load`)
-    console.log(`${emoji} [CLIENT-PERF] /client - Initial posts count: ${initialPosts.length}, stats loaded: ${JSON.stringify(initialStats)}`)
   }, [])
 
   const handleStatusUpdate = async (postId: string, newStatus: string, feedbackText?: string) => {
@@ -136,16 +144,14 @@ export default function ClientDashboard({ initialStats, initialPosts, clientId, 
     }
 
     // Optimistically update stats
-    setStats(prevStats => {
-      const newStats = { ...prevStats }
-      // Decrement previous status count
-      if (previousStatus === 'PENDING') newStats.pendingApprovals = Math.max(0, newStats.pendingApprovals - 1)
-      else if (previousStatus === 'APPROVED') newStats.analyticsData = Math.max(0, newStats.analyticsData - 1)
-      // Increment new status count
-      if (newStatus === 'PENDING') newStats.pendingApprovals++
-      else if (newStatus === 'APPROVED') newStats.analyticsData++
-      return newStats
-    })
+    if (stats) {
+      const optimisticStats = { ...stats }
+      if (previousStatus === 'PENDING') optimisticStats.pendingApprovals = Math.max(0, optimisticStats.pendingApprovals - 1)
+      else if (previousStatus === 'APPROVED') optimisticStats.analyticsData = Math.max(0, optimisticStats.analyticsData - 1)
+      if (newStatus === 'PENDING') optimisticStats.pendingApprovals++
+      else if (newStatus === 'APPROVED') optimisticStats.analyticsData++
+      mutateStats(optimisticStats, false)
+    }
 
     try {
       const response = await fetch(`/api/posts/${postId}`, {
@@ -164,18 +170,14 @@ export default function ClientDashboard({ initialStats, initialPosts, clientId, 
       toast.success(`Post ${newStatus.toLowerCase()}`)
 
       // Refresh stats in background (for accuracy)
-      fetch('/api/client/stats')
-        .then(res => res.ok ? res.json() : null)
-        .then(newStats => {
-          if (newStats) setStats(newStats)
-        })
-        .catch(() => {})
+      mutateStats()
     } catch (error) {
       // Revert optimistic update on error
       updatePostLocally(postId, { status: previousStatus, feedback: undefined })
       if (selectedPost?.id === postId && previousStatus) {
         setSelectedPost({ ...selectedPost, status: previousStatus as Post['status'] })
       }
+      mutateStats() // Revalidate stats
       console.error('Error updating post:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to update post')
     }
@@ -289,38 +291,42 @@ export default function ClientDashboard({ initialStats, initialPosts, clientId, 
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {statCards.map((card) => (
-              <PremiumCard
-                key={card.name}
-                hover
-                gradient
-                className="p-8 cursor-pointer animate-slide-up bg-theme-card border-theme-border"
-                onClick={() => {
-                  if (card.name === 'Pending Approvals') {
-                    router.push('/client/posts?filter=PENDING')
-                  } else if (card.name === 'Approved Posts') {
-                    router.push('/client/posts?filter=APPROVED')
-                  } else if (card.name === 'Scheduled Posts') {
-                    router.push('/client/calendar')
-                  }
-                }}
-              >
-                <div className="space-y-4">
-                  <div className={`${card.color} rounded-xl p-4 w-fit shadow-lg`}>
-                    <card.icon className={`w-7 h-7 ${card.iconColor}`} strokeWidth={card.name === 'Approved Posts' ? 3 : 2} />
+          {!stats ? (
+            <StatCardsSkeletonGrid />
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {statCards.map((card) => (
+                <PremiumCard
+                  key={card.name}
+                  hover
+                  gradient
+                  className="p-8 cursor-pointer animate-slide-up bg-theme-card border-theme-border"
+                  onClick={() => {
+                    if (card.name === 'Pending Approvals') {
+                      router.push('/client/posts?filter=PENDING')
+                    } else if (card.name === 'Approved Posts') {
+                      router.push('/client/posts?filter=APPROVED')
+                    } else if (card.name === 'Scheduled Posts') {
+                      router.push('/client/calendar')
+                    }
+                  }}
+                >
+                  <div className="space-y-4">
+                    <div className={`${card.color} rounded-xl p-4 w-fit shadow-lg`}>
+                      <card.icon className={`w-7 h-7 ${card.iconColor}`} strokeWidth={card.name === 'Approved Posts' ? 3 : 2} />
+                    </div>
+                    <div>
+                      <p className="text-xl font-semibold text-white">{card.name}</p>
+                      <p className="text-sm text-gray-400 mt-1">{card.description}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xl font-semibold text-white">{card.name}</p>
-                    <p className="text-sm text-gray-400 mt-1">{card.description}</p>
+                  <div className="mt-6">
+                    <p className="text-5xl font-bold text-white">{card.value}</p>
                   </div>
-                </div>
-                <div className="mt-6">
-                  <p className="text-5xl font-bold text-white">{card.value}</p>
-                </div>
-              </PremiumCard>
-            ))}
-          </div>
+                </PremiumCard>
+              ))}
+            </div>
+          )}
 
           {/* Content Review Section */}
           <div id="content-review">
@@ -366,7 +372,9 @@ export default function ClientDashboard({ initialStats, initialPosts, clientId, 
 
               {/* Post Cards Grid */}
               <div className="px-6 py-5">
-                {filteredPosts.length > 0 ? (
+                {isLoadingRecent ? (
+                  <PostCardSkeletonGrid count={6} />
+                ) : filteredPosts.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredPosts.map((post) => (
                       <div

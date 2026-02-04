@@ -88,55 +88,53 @@ export async function GET(request: NextRequest) {
       whereClause.clientId = session.user.clientId
     }
 
-    // Run count and findMany in parallel for better performance
+    // Fetch posts only - skip COUNT query for performance (fetch limit+1 to check hasMore)
     const dbStart = startPerf()
-    const [posts, totalCount] = await Promise.all([
-      prisma.post.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          content: true,
-          tweetText: true,
-          scheduledDate: true,
-          typefullyUrl: true,
-          status: true,
-          feedback: true,
-          media: true,
-          createdAt: true,
-          publishedDate: true,
-          client: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              timezone: true,
-              profilePicture: true,
-              twitterHandle: true
-            }
+    const posts = await prisma.post.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        content: true,
+        tweetText: true,
+        scheduledDate: true,
+        typefullyUrl: true,
+        status: true,
+        feedback: true,
+        media: true,
+        createdAt: true,
+        publishedDate: true,
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            timezone: true,
+            profilePicture: true,
+            twitterHandle: true
           }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        skip,
-        take: limit
-      }),
-      prisma.post.count({ where: whereClause })
-    ])
-    perfLog('API /api/posts - DB query (posts + count)', dbStart)
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip,
+      take: limit + 1 // Fetch one extra to check hasMore
+    })
+    perfLog('API /api/posts - DB query', dbStart)
+
+    // Check if there are more posts
+    const hasMore = posts.length > limit
+    const returnPosts = hasMore ? posts.slice(0, limit) : posts
 
     perfLog('API /api/posts - TOTAL', apiStart)
 
-    // Return with pagination metadata
-    // Use stale-while-revalidate for better UX - serve cached content while fetching fresh
+    // Return with pagination metadata (no total count for performance)
     return NextResponse.json({
-      posts,
+      posts: returnPosts,
       pagination: {
         page,
         limit,
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        hasMore: skip + posts.length < totalCount
+        hasMore
       }
     }, {
       headers: {

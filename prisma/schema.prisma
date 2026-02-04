@@ -145,6 +145,7 @@ model Post {
   @@index([clientId, status])
   @@index([scheduledDate])
   @@index([createdAt])
+  @@index([clientId, createdAt(sort: Desc)])
   @@map("Post")
 }
 
