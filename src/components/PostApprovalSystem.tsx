@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { format } from 'date-fns'
 import useSWR from 'swr'
 import {
@@ -26,8 +26,10 @@ import DateTimePicker from './DateTimePicker'
 import TweetMockup from './TweetMockup'
 import CommentableTweetMockup from './CommentableTweetMockup'
 import CommentList from './CommentList'
-import { PostListSkeleton } from './Skeleton'
+import { PostListSkeleton, Skeleton } from './Skeleton'
 import { getCachedPosts, cachePosts } from '@/lib/cache/indexed-db'
+
+const RECENT_DAYS = 10
 
 // SWR fetcher with IndexedDB caching
 const createFetcher = (clientId: string | undefined) => async (url: string) => {
@@ -48,8 +50,15 @@ const createFetcher = (clientId: string | undefined) => async (url: string) => {
   }
 
   const duration = Date.now() - start
-  console.log(`🌐 [NETWORK] Fetched ${posts.length} posts in ${duration}ms`)
+  console.log(`[NETWORK] Fetched ${posts.length} posts in ${duration}ms`)
   return posts
+}
+
+// Calculate recent cutoff date
+function getRecentCutoffDate(): string {
+  const date = new Date()
+  date.setDate(date.getDate() - RECENT_DAYS)
+  return date.toISOString()
 }
 // import PostCalendar from './PostCalendar'
 // import ContentDump from './ContentDump'
@@ -114,6 +123,8 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
   const [selectedClient, setSelectedClient] = useState<string>(clientId || '')
   const [cachedPosts, setCachedPosts] = useState<Post[]>([])
   const [cacheLoaded, setCacheLoaded] = useState(false)
+  const [olderPosts, setOlderPosts] = useState<Post[]>([])
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false)
 
   // Determine the effective client ID for caching
   const effectiveClientId = userRole === 'CLIENT' ? clientId : selectedClient
@@ -130,7 +141,7 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
       try {
         const cached = await getCachedPosts(effectiveClientId)
         if (cached.length > 0) {
-          console.log(`⚡ [CACHE] Loaded ${cached.length} posts from IndexedDB in ${Date.now() - start}ms`)
+          console.log(`[CACHE] Loaded ${cached.length} posts from IndexedDB in ${Date.now() - start}ms`)
           setCachedPosts(cached as Post[])
         }
       } catch (err) {
@@ -142,33 +153,109 @@ export default function PostApprovalSystem({ userRole, clientId, isAdmin, initia
     loadCache()
   }, [effectiveClientId])
 
-  // Build the API URL based on user role and selected client
-  const postsUrl = useMemo(() => {
+  // Build the API URL for recent posts (priority loading)
+  const recentCutoff = useMemo(() => getRecentCutoffDate(), [])
+  const recentPostsUrl = useMemo(() => {
     if (userRole === 'CLIENT') {
-      return clientId ? `/api/posts?clientId=${clientId}` : null
+      return clientId ? `/api/posts?clientId=${clientId}&since=${recentCutoff}` : null
     }
-    return selectedClient ? `/api/posts?clientId=${selectedClient}` : '/api/posts'
-  }, [userRole, clientId, selectedClient])
+    return selectedClient
+      ? `/api/posts?clientId=${selectedClient}&since=${recentCutoff}`
+      : `/api/posts?since=${recentCutoff}`
+  }, [userRole, clientId, selectedClient, recentCutoff])
 
   // Create fetcher with client ID for caching
   const fetcher = useMemo(() => createFetcher(effectiveClientId), [effectiveClientId])
 
-  // Use SWR for data fetching with caching
-  const { data: freshPosts, isLoading: loadingFresh, mutate: mutatePosts } = useSWR<Post[]>(
-    postsUrl,
+  // Fetch older posts in background
+  const fetchOlderPosts = useCallback(async () => {
+    if (isLoadingOlder) return
+
+    const url = userRole === 'CLIENT'
+      ? clientId ? `/api/posts?clientId=${clientId}&before=${recentCutoff}` : null
+      : selectedClient
+        ? `/api/posts?clientId=${selectedClient}&before=${recentCutoff}`
+        : `/api/posts?before=${recentCutoff}`
+
+    if (!url) return
+
+    setIsLoadingOlder(true)
+    try {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('Failed to fetch older posts')
+      const data = await response.json()
+      const fetchedPosts = data?.posts ?? (Array.isArray(data) ? data : [])
+      console.log(`[NETWORK] Fetched ${fetchedPosts.length} older posts in background`)
+      setOlderPosts(fetchedPosts)
+
+      // Cache older posts
+      if (effectiveClientId && fetchedPosts.length > 0) {
+        cachePosts(fetchedPosts, effectiveClientId).catch(err =>
+          console.warn('Failed to cache older posts:', err)
+        )
+      }
+    } catch (err) {
+      console.error('Error fetching older posts:', err)
+    } finally {
+      setIsLoadingOlder(false)
+    }
+  }, [userRole, clientId, selectedClient, recentCutoff, effectiveClientId, isLoadingOlder])
+
+  // Use SWR for recent posts (priority loading)
+  const { data: recentPosts, isLoading: loadingRecent, mutate: mutatePosts } = useSWR<Post[]>(
+    recentPostsUrl,
     fetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: true,
       keepPreviousData: true,
       dedupingInterval: 10000,
-      fallbackData: cachedPosts.length > 0 ? cachedPosts : undefined
+      fallbackData: cachedPosts.length > 0
+        ? cachedPosts.filter(p => new Date(p.createdAt) >= new Date(recentCutoff))
+        : undefined
     }
   )
 
-  // Use fresh posts if available, otherwise use cache
-  const posts = freshPosts ?? cachedPosts
-  const loading = !cacheLoaded || (loadingFresh && posts.length === 0)
+  // After recent posts load, fetch older posts in background
+  useEffect(() => {
+    if (recentPosts && recentPosts.length > 0 && olderPosts.length === 0 && !isLoadingOlder) {
+      fetchOlderPosts()
+    }
+  }, [recentPosts, olderPosts.length, isLoadingOlder, fetchOlderPosts])
+
+  // Merge recent and older posts
+  const posts = useMemo(() => {
+    const recent = recentPosts ?? []
+    const postsMap = new Map<string, Post>()
+
+    // Add recent posts first
+    for (const post of recent) {
+      postsMap.set(post.id, post)
+    }
+    // Add older posts
+    for (const post of olderPosts) {
+      if (!postsMap.has(post.id)) {
+        postsMap.set(post.id, post)
+      }
+    }
+    // Fallback to cache if no network data
+    if (postsMap.size === 0 && cachedPosts.length > 0) {
+      return cachedPosts
+    }
+
+    return Array.from(postsMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+  }, [recentPosts, olderPosts, cachedPosts])
+
+  const loading = !cacheLoaded || (loadingRecent && posts.length === 0)
+
+  // Refresh all posts (recent + older)
+  const refreshAllPosts = () => {
+    mutatePosts()
+    setOlderPosts([])
+    fetchOlderPosts()
+  }
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)

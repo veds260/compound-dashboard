@@ -12,6 +12,7 @@ import { ClockIcon, ArrowsPointingOutIcon, CheckCircleIcon, XCircleIcon, ArrowTo
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import type { ClientStats, Post } from '@/lib/data/client-data'
+import { usePriorityPosts } from '@/lib/hooks/use-priority-posts'
 
 // Custom Hourglass Icon Component
 function HourglassIcon({ className }: { className?: string }) {
@@ -85,9 +86,11 @@ function convertToLocalTimezone(utcDate: Date | string, timezone?: string | null
 interface ClientDashboardProps {
   initialStats: ClientStats
   initialPosts: Post[]
+  clientId: string
+  recentDays?: number
 }
 
-export default function ClientDashboard({ initialStats, initialPosts }: ClientDashboardProps) {
+export default function ClientDashboard({ initialStats, initialPosts, clientId, recentDays = 10 }: ClientDashboardProps) {
   const router = useRouter()
   const [statusFilter, setStatusFilter] = useState<string>('PENDING')
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
@@ -96,7 +99,20 @@ export default function ClientDashboard({ initialStats, initialPosts }: ClientDa
   const [feedbackAction, setFeedbackAction] = useState<'SUGGEST_CHANGES' | 'REJECTED'>('SUGGEST_CHANGES')
   const [feedback, setFeedback] = useState('')
   const [stats, setStats] = useState(initialStats)
-  const [posts, setPosts] = useState(initialPosts)
+
+  // Use priority loading hook for background older posts loading
+  const {
+    posts,
+    isLoadingOlder,
+    updatePostLocally
+  } = usePriorityPosts({
+    clientId,
+    recentDays,
+    enabled: true
+  })
+
+  // Use initial posts until priority hook loads data
+  const displayPosts = posts.length > 0 ? posts : (initialPosts as any[])
 
   // Log client-side hydration time
   useEffect(() => {
@@ -107,6 +123,30 @@ export default function ClientDashboard({ initialStats, initialPosts }: ClientDa
   }, [])
 
   const handleStatusUpdate = async (postId: string, newStatus: string, feedbackText?: string) => {
+    // Optimistic update - update UI immediately
+    const previousStatus = displayPosts.find(p => p.id === postId)?.status
+    updatePostLocally(postId, {
+      status: newStatus as Post['status'],
+      feedback: feedbackText
+    })
+
+    // Update selected post if it's the one being updated
+    if (selectedPost?.id === postId) {
+      setSelectedPost({ ...selectedPost, status: newStatus as Post['status'], feedback: feedbackText || selectedPost.feedback })
+    }
+
+    // Optimistically update stats
+    setStats(prevStats => {
+      const newStats = { ...prevStats }
+      // Decrement previous status count
+      if (previousStatus === 'PENDING') newStats.pendingApprovals = Math.max(0, newStats.pendingApprovals - 1)
+      else if (previousStatus === 'APPROVED') newStats.analyticsData = Math.max(0, newStats.analyticsData - 1)
+      // Increment new status count
+      if (newStatus === 'PENDING') newStats.pendingApprovals++
+      else if (newStatus === 'APPROVED') newStats.analyticsData++
+      return newStats
+    })
+
     try {
       const response = await fetch(`/api/posts/${postId}`, {
         method: 'PUT',
@@ -121,30 +161,21 @@ export default function ClientDashboard({ initialStats, initialPosts }: ClientDa
         throw new Error(errorData.error || 'Failed to update post status')
       }
 
-      const updatedPost = await response.json()
-
-      // Update local posts state
-      setPosts(prevPosts =>
-        prevPosts.map(p => p.id === postId ? { ...p, status: newStatus as Post['status'], feedback: feedbackText || p.feedback } : p)
-      )
-
-      // Update selected post if it's the one being updated
-      if (selectedPost?.id === postId) {
-        setSelectedPost({ ...selectedPost, status: newStatus as Post['status'], feedback: feedbackText || selectedPost.feedback })
-      }
-
-      // Refresh stats
-      const statsResponse = await fetch('/api/client/stats')
-      if (statsResponse.ok) {
-        const newStats = await statsResponse.json()
-        setStats(newStats)
-      }
-
       toast.success(`Post ${newStatus.toLowerCase()}`)
 
-      // Refresh the page data
-      router.refresh()
+      // Refresh stats in background (for accuracy)
+      fetch('/api/client/stats')
+        .then(res => res.ok ? res.json() : null)
+        .then(newStats => {
+          if (newStats) setStats(newStats)
+        })
+        .catch(() => {})
     } catch (error) {
+      // Revert optimistic update on error
+      updatePostLocally(postId, { status: previousStatus, feedback: undefined })
+      if (selectedPost?.id === postId && previousStatus) {
+        setSelectedPost({ ...selectedPost, status: previousStatus as Post['status'] })
+      }
       console.error('Error updating post:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to update post')
     }
@@ -171,7 +202,7 @@ export default function ClientDashboard({ initialStats, initialPosts }: ClientDa
   }
 
   const pendingCount = stats?.pendingApprovals || 0
-  const suggestChangesCount = posts?.filter(p => p.status === 'SUGGEST_CHANGES').length || 0
+  const suggestChangesCount = displayPosts?.filter(p => p.status === 'SUGGEST_CHANGES').length || 0
 
   const statCards = [
     {
@@ -204,8 +235,8 @@ export default function ClientDashboard({ initialStats, initialPosts }: ClientDa
   ]
 
   const filteredPosts = statusFilter === 'ALL'
-    ? (posts || []).slice(0, 6)
-    : (posts || []).filter(post => post.status === statusFilter).slice(0, 6)
+    ? (displayPosts || []).slice(0, 6)
+    : (displayPosts || []).filter(post => post.status === statusFilter).slice(0, 6)
 
   const getStatusBadge = (status: string) => {
     const styles = {

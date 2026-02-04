@@ -128,3 +128,43 @@ export async function getClientPostsForApproval(clientId: string, limit: number 
 export async function getClientStatsUncached(clientId: string): Promise<ClientStats> {
   return getClientStatsFromCache(clientId)
 }
+
+// Get recent posts only (for priority loading - last N days)
+export async function getRecentClientPosts(clientId: string, recentDays: number = 10, limit: number = 50): Promise<Post[]> {
+  const dbStart = startPerf()
+
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - recentDays)
+
+  const posts = await prisma.post.findMany({
+    where: {
+      clientId,
+      createdAt: { gte: cutoffDate }
+    },
+    select: {
+      id: true,
+      content: true,
+      scheduledDate: true,
+      typefullyUrl: true,
+      status: true,
+      feedback: true,
+      media: true,
+      createdAt: true,
+      client: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          timezone: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    },
+    take: limit
+  })
+
+  perfLog('DB - getRecentClientPosts', dbStart)
+  return posts as Post[]
+}

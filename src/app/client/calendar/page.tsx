@@ -5,30 +5,56 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
 import PostCalendar from '@/components/PostCalendar'
+import { Skeleton } from '@/components/Skeleton'
+import { usePriorityPosts } from '@/lib/hooks/use-priority-posts'
 import toast from 'react-hot-toast'
 
-interface Post {
-  id: string
-  content: string
-  scheduledDate?: string
-  typefullyUrl: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUGGEST_CHANGES' | 'PUBLISHED'
-  feedback?: string
-  media?: string
-  createdAt: string
-  client: {
-    id: string
-    name: string
-    email: string
-  }
+function CalendarSkeleton() {
+  return (
+    <div className="bg-theme-card rounded-xl border border-theme-border p-6">
+      {/* Month header */}
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-8 w-40" />
+        <div className="flex gap-2">
+          <Skeleton className="h-10 w-10 rounded-lg" />
+          <Skeleton className="h-10 w-10 rounded-lg" />
+        </div>
+      </div>
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-2 mb-4">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <Skeleton key={i} className="h-6 w-full" />
+        ))}
+      </div>
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-2">
+        {Array.from({ length: 35 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-lg" />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function ClientCalendarPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [posts, setPosts] = useState<Post[]>([])
   const [clientTimezone, setClientTimezone] = useState<string | undefined>()
-  const [loading, setLoading] = useState(true)
+  const [timezoneLoaded, setTimezoneLoaded] = useState(false)
+
+  const clientId = session?.user?.clientId
+
+  // Use priority loading hook
+  const {
+    posts,
+    isLoadingRecent,
+    isLoadingOlder,
+    mutate
+  } = usePriorityPosts({
+    clientId,
+    recentDays: 10,
+    enabled: status === 'authenticated' && !!clientId
+  })
 
   useEffect(() => {
     if (status === 'loading') return
@@ -43,61 +69,41 @@ export default function ClientCalendarPage() {
       return
     }
 
-    fetchData()
+    // Fetch client timezone
+    fetchClientTimezone()
   }, [session, status, router])
 
-  const fetchData = async () => {
+  const fetchClientTimezone = async () => {
     try {
-      // Fetch posts and client data in parallel
-      const [postsResponse, clientResponse] = await Promise.all([
-        fetch(`/api/posts?clientId=${session?.user?.clientId}`),
-        fetch(`/api/admin/clients/${session?.user?.clientId}`)
-      ])
-
-      const postsData = await postsResponse.json()
-      const clientData = await clientResponse.json()
-
-      if (!postsResponse.ok) {
-        throw new Error(postsData.error || 'Failed to load posts')
-      }
-
-      // Handle both new paginated format { posts, pagination } and old array format
-      setPosts(postsData.posts || (Array.isArray(postsData) ? postsData : []))
-      if (clientData && clientData.timezone) {
-        setClientTimezone(clientData.timezone)
+      const response = await fetch(`/api/admin/clients/${session?.user?.clientId}`)
+      if (response.ok) {
+        const clientData = await response.json()
+        if (clientData?.timezone) {
+          setClientTimezone(clientData.timezone)
+        }
       }
     } catch (error) {
-      console.error('Error fetching data:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load data')
-      setPosts([])
+      console.error('Error fetching client timezone:', error)
     } finally {
-      setLoading(false)
+      setTimezoneLoaded(true)
     }
   }
 
-  const fetchPosts = async () => {
-    try {
-      const response = await fetch(`/api/posts?clientId=${session?.user?.clientId}`)
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to load posts')
-      }
-
-      // Handle both new paginated format { posts, pagination } and old array format
-      setPosts(data.posts || (Array.isArray(data) ? data : []))
-    } catch (error) {
-      console.error('Error fetching posts:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load posts')
-      setPosts([])
-    }
+  const handlePostUpdate = () => {
+    mutate()
   }
 
-  if (status === 'loading' || !session || loading) {
+  if (status === 'loading' || !session) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-theme-accent"></div>
+        <div className="space-y-6">
+          <div className="md:flex md:items-center md:justify-between">
+            <div className="flex-1 min-w-0">
+              <Skeleton className="h-9 w-48 mb-2" />
+              <Skeleton className="h-5 w-72" />
+            </div>
+          </div>
+          <CalendarSkeleton />
         </div>
       </Layout>
     )
@@ -113,18 +119,25 @@ export default function ClientCalendarPage() {
             </h1>
             <p className="mt-1 text-sm text-gray-400">
               View your scheduled posts in calendar format
+              {isLoadingOlder && (
+                <span className="ml-2 text-xs text-gray-500">(loading older posts...)</span>
+              )}
             </p>
           </div>
         </div>
 
-        <PostCalendar
-          posts={posts}
-          userRole="CLIENT"
-          clientTimezone={clientTimezone}
-          clientId={session?.user?.clientId}
-          onEditPost={() => {}}
-          onPostUpdate={fetchPosts}
-        />
+        {isLoadingRecent ? (
+          <CalendarSkeleton />
+        ) : (
+          <PostCalendar
+            posts={posts as any}
+            userRole="CLIENT"
+            clientTimezone={clientTimezone}
+            clientId={clientId}
+            onEditPost={() => {}}
+            onPostUpdate={handlePostUpdate}
+          />
+        )}
       </div>
     </Layout>
   )

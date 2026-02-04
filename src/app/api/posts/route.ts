@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const status = searchParams.get('status')
+    const since = searchParams.get('since')
+    const before = searchParams.get('before')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
     const skip = (page - 1) * limit
@@ -28,6 +30,17 @@ export async function GET(request: NextRequest) {
     // Add status filter if provided
     if (status && status !== 'ALL') {
       whereClause.status = status
+    }
+
+    // Add date range filters
+    if (since || before) {
+      whereClause.createdAt = {}
+      if (since) {
+        whereClause.createdAt.gte = new Date(since)
+      }
+      if (before) {
+        whereClause.createdAt.lt = new Date(before)
+      }
     }
 
     if (session.user.role === 'ADMIN') {

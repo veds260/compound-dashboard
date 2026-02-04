@@ -1,9 +1,11 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getClientStats, getClientPosts } from '@/lib/data/client-data'
+import { getClientStats, getRecentClientPosts } from '@/lib/data/client-data'
 import { startPerf, perfLog } from '@/lib/perf-logger'
 import ClientDashboard from './client-dashboard'
+
+const RECENT_DAYS = 10
 
 export default async function ClientPage() {
   const pageStart = startPerf()
@@ -38,21 +40,23 @@ export default async function ClientPage() {
     redirect('/login')
   }
 
-  // Fetch data on the server (cached for 30 seconds)
+  // Fetch data on the server - only recent posts for fast initial load
   const dataStart = startPerf()
-  const [stats, posts] = await Promise.all([
+  const [stats, recentPosts] = await Promise.all([
     getClientStats(clientId),
-    getClientPosts(clientId, 50)
+    getRecentClientPosts(clientId, RECENT_DAYS, 50)
   ])
-  perfLog('/client - getClientStats + getClientPosts', dataStart)
+  perfLog('/client - getClientStats + getRecentClientPosts', dataStart)
 
   perfLog('/client - TOTAL SERVER TIME', pageStart)
 
-  // Pass data to client component
+  // Pass data to client component with clientId for background loading
   return (
     <ClientDashboard
       initialStats={stats}
-      initialPosts={posts}
+      initialPosts={recentPosts}
+      clientId={clientId}
+      recentDays={RECENT_DAYS}
     />
   )
 }

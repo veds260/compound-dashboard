@@ -78,6 +78,7 @@ module.exports = {
         'slide-up': 'slideUp 0.3s ease-out',
         'scale-in': 'scaleIn 0.2s ease-out',
         'card-hover': 'cardHover 0.3s ease-in-out',
+        'shimmer': 'shimmer 1.5s infinite',
       },
       keyframes: {
         fadeIn: {
@@ -95,6 +96,10 @@ module.exports = {
         cardHover: {
           '0%': { transform: 'translateY(0) scale(1)' },
           '100%': { transform: 'translateY(-4px) scale(1.02)' },
+        },
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
         },
       },
       backdropBlur: {

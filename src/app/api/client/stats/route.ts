@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getClientStatsFromCache } from '@/lib/stats-manager'
 import { startPerf, perfLog } from '@/lib/perf-logger'
 
 export async function GET() {
@@ -15,37 +15,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const now = new Date()
-
     const dbStart = startPerf()
-    const [scheduledPosts, pendingApprovals, approvedPosts] = await Promise.all([
-      prisma.post.count({
-        where: {
-          clientId: session.user.clientId,
-          scheduledDate: { gte: now }
-        }
-      }),
-      prisma.post.count({
-        where: {
-          clientId: session.user.clientId,
-          status: 'PENDING'
-        }
-      }),
-      prisma.post.count({
-        where: {
-          clientId: session.user.clientId,
-          status: 'APPROVED'
-        }
-      })
-    ])
-    perfLog('API /api/client/stats - DB queries', dbStart)
+    const stats = await getClientStatsFromCache(session.user.clientId)
+    perfLog('API /api/client/stats - getClientStatsFromCache', dbStart)
 
     perfLog('API /api/client/stats - TOTAL', apiStart)
 
     return NextResponse.json({
-      scheduledPosts,
-      pendingApprovals,
-      analyticsData: approvedPosts
+      scheduledPosts: stats.scheduledPosts,
+      pendingApprovals: stats.pendingApprovals,
+      analyticsData: stats.analyticsData
     }, {
       headers: {
         'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
